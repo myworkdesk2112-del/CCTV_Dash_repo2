@@ -6,7 +6,7 @@ Paste everything below into each tool. Ask both, compare answers, and use disagr
 
 ## Context
 
-I'm competing in the **Gujarat Police Innovation Challenge 2026 ("Sentinel")** — a hackathon run by Gujarat Police (Home Department, Government of India) with a ₹51,00,000 prize pool. The goal is to design and build a real, production-deployable system, not just a demo. Submission deadline: 7 September 2026.
+I'm competing in the **Gujarat Police Innovation Challenge 2026 ("Sentinel")** — a hackathon run by Gujarat Police (Home Department, Government of India) with a ₹51,00,000 prize pool. The goal is to design and build a real, production-deployable system, not just a demo. Submission deadline: 28 September 2026 (as of 2026-09-17; this is a historical research prompt and the date has moved twice since it was originally written — see `docs/hackathon/HACKATHON_DETAILS.md` for the current authoritative date).
 
 ## The problem we're solving
 

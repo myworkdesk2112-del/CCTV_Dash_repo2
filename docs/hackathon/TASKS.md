@@ -1,11 +1,15 @@
 # Sentinel — Next Actions
 
-Living task list. Deadline **15 September 2026** (Phase 1, updated
-2026-09-05 — was 7 Sep), event 22–23 Sep (was 10–11 Sep). **2 days left
-as of 2026-09-13.**
-Last updated **2026-09-13** (see new section below — reconciled against
-actual code and real sandbox verification; several entries below were
-stale/already fixed and have been corrected).
+Living task list. Deadline **28 September 2026** (Phase 1, updated
+2026-09-17 — was 15 Sep, which was itself moved from 7 Sep on 2026-09-05),
+event 12–13 October 2026 (was 22–23 Sep, was 10–11 Sep). **11 days left
+as of 2026-09-17.** This date has moved twice already — re-check
+https://sentinel.gujarat.gov.in/ before trusting it if this file is more
+than a few days old.
+Last updated **2026-09-17** (deadline/event dates corrected against the
+live organizer site; see `docs/hackathon/HACKATHON_DETAILS.md` and
+`REQUIREMENTS_COVERAGE.md` for the same correction). Prior 2026-09-13
+reconciliation notes below are otherwise unchanged.
 Cross-check against `REQUIREMENTS_COVERAGE.md` (the authoritative
 deliverable-status matrix) and `sentinel-solution/README.md` ("Known
 issues") before trusting this file if it's more than a day or two old.

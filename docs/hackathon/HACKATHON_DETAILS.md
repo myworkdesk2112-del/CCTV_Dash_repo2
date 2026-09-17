@@ -20,13 +20,16 @@ Uniqueness: uses real government CCTV footage (not synthetic/demo data); top sol
 | Milestone | Date |
 |---|---|
 | Registration opens | 4 August 2026 |
-| Registration & submission deadline | 15 September 2026 |
-| Shortlisting | 15 September 2026 (evening) |
-| Event / Grand Finale | 22–23 September 2026 |
-| Results announced | 23 September 2026 |
+| Registration & submission deadline | 28 September 2026 |
+| Shortlisting | 28 September 2026 |
+| Event / Grand Finale | 12–13 October 2026 |
+| Results announced | 13 October 2026 |
 
-(Updated 2026-09-05 — confirmed against the live `/phases` and `/schedule`
-pages; deadline moved from the originally-stated 7 Sep / event 10–11 Sep.)
+(Updated 2026-09-17 — confirmed against the live sentinel.gujarat.gov.in
+homepage; deadline moved again from 15 Sep to 28 Sep, event moved from
+22–23 Sep to 12–13 Oct. Prior history: originally 7 Sep / event 10–11 Sep,
+first moved to 15 Sep / 22–23 Sep as of 2026-09-05. Re-check the live site
+before treating this date as final — it has moved twice already.)
 
 ## 3. Who Can Participate
 
