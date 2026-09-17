@@ -22,7 +22,7 @@ def list_watchlist(db: Session = Depends(get_db), _principal: Principal = Depend
 
     return [
         {"plate": e.plate, "reason": e.reason, "added_at": e.added_at.isoformat()}
-        for e in db.query(WatchlistEntry).all()
+        for e in db.query(WatchlistEntry).order_by(WatchlistEntry.added_at.desc()).limit(5000).all()
     ]
 
 

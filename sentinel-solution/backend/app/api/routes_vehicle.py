@@ -77,7 +77,7 @@ def recent_detections(
         )
     if camera_id is not None:
         query = query.filter(VehicleEvent.camera_id == camera_id)
-    events = query.order_by(VehicleEvent.observed_at.desc()).limit(limit).all()
+    events = query.order_by(VehicleEvent.observed_at.desc()).limit(min(max(limit, 1), 500)).all()
     cameras = _cameras_by_id(db, (e.camera_id for e in events))
     out = []
     for e in events:
@@ -116,7 +116,7 @@ def _explain_link(e: VehicleEvent) -> dict:
     if e.link_time_gap_s is None:
         temporal_consistency = None
     else:
-        temporal_consistency = max(0.0, 1.0 - (e.link_time_gap_s / _TEMPORAL_DECAY_S))
+        temporal_consistency = min(1.0, max(0.0, 1.0 - (e.link_time_gap_s / _TEMPORAL_DECAY_S)))
 
     if e.link_method in ("new_identity",):
         fused_score = plate_confidence if e.plate_confidence else None

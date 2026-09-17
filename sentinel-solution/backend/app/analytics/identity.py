@@ -127,7 +127,7 @@ class IdentityResolver:
             existing.last_seen_at = observed_at
             existing.last_camera_id = camera_id
             existing.set_embedding(embedding)
-            if plate_confidence and (existing.plate_confidence or 0) < plate_confidence:
+            if plate_confidence is not None and (existing.plate_confidence or 0) < plate_confidence:
                 existing.plate_confidence = plate_confidence
             return existing, LinkInfo(method="plate_continuation", time_gap_s=gap_s)
 

@@ -69,7 +69,7 @@ def _iou(a: BBox, b: BBox) -> float:
     return inter / union if union > 0 else 0.0
 
 
-@dataclass
+@dataclass(eq=False)
 class Track:
     track_id: int
     bbox: BBox

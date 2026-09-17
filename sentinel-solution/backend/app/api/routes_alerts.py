@@ -59,7 +59,7 @@ def list_alerts(
         )
     if camera_id is not None:
         query = query.filter(Alert.camera_id == camera_id)
-    alerts = query.order_by(Alert.created_at.desc()).limit(limit).all()
+    alerts = query.order_by(Alert.created_at.desc()).limit(min(max(limit, 1), 500)).all()
     return [_serialize(a) for a in alerts]
 
 

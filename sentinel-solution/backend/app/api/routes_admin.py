@@ -109,7 +109,7 @@ def list_audit_log(
     query = db.query(AuditLog)
     if principal.role != "admin":
         query = query.filter(AuditLog.user_id == principal.user_id)
-    rows = query.order_by(AuditLog.created_at.desc()).limit(min(limit, 500)).all()
+    rows = query.order_by(AuditLog.created_at.desc()).limit(min(max(limit, 1), 500)).all()
     return [
         {
             "id": r.id,

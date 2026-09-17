@@ -152,6 +152,10 @@ class CatalogueClient:
         if config.ONVIF_DISCOVERY_ENABLED:
             onvif_cameras = self._try_onvif_discovery()
             if onvif_cameras:
+                if config.DEMO_CAMERA_SCOPE is not None:
+                    onvif_cameras = {
+                        cid: cam for cid, cam in onvif_cameras.items() if cid in config.DEMO_CAMERA_SCOPE
+                    }
                 with self._lock:
                     self._cameras = onvif_cameras
                     self._last_refresh = time.time()
@@ -216,21 +220,24 @@ class CatalogueClient:
         with self._lock:
             return self._cameras.get(str(camera_id))
 
-    def authenticated_get(self, url: str, **kwargs):
+    def authenticated_get(self, url: str, timeout: float = 10, **kwargs):
         """Fetch a CDN-hosted URL (HLS playlist/segment) using this client's
         already-authenticated session — needed because the CDN's access
         password lives here, not in the browser. Used by routes_stream.py to
         proxy HLS so the frontend can actually play a feed without us having
         to hand the sandbox access password to every browser tab. Re-logs-in
-        once on session expiry, same as refresh()."""
+        once on session expiry, same as refresh().
+
+        `timeout` defaults to 10s but is overridable — an LL-HLS blocking
+        playlist reload can legitimately hold the connection open longer."""
         if not self._logged_in and not self._login():
             raise RuntimeError("not authenticated with CDN — check SENTINEL_ACCESS_TOKEN")
-        resp = self._session.get(url, timeout=10, allow_redirects=False, **kwargs)
+        resp = self._session.get(url, timeout=timeout, allow_redirects=False, **kwargs)
         if resp.status_code in (301, 302, 401, 403):
             self._logged_in = False
             if not self._login():
                 raise RuntimeError("re-authentication with CDN failed")
-            resp = self._session.get(url, timeout=10, allow_redirects=False, **kwargs)
+            resp = self._session.get(url, timeout=timeout, allow_redirects=False, **kwargs)
         resp.raise_for_status()
         return resp
 

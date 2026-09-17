@@ -77,9 +77,6 @@ class StreamManager:
             live_ids = set(live_cameras.keys())
             to_start = [live_cameras[cam_id] for cam_id in live_ids - current_ids]
             to_stop = [(cam_id, self._workers.pop(cam_id)) for cam_id in current_ids - live_ids]
-            for cam_id, _ in to_stop:
-                self._frame_counters.pop(cam_id, None)
-                self._analytics_health.pop(cam_id, None)
 
         # worker.start()/stop() happen OUTSIDE the lock: stop() joins the
         # worker's thread (up to 5s), which that same thread's frame
@@ -97,6 +94,14 @@ class StreamManager:
             logger.info("started worker for camera %s (%s)", cam.id, cam.location)
         for cam_id, worker in to_stop:
             worker.stop()
+            # Only pop these AFTER stop() has joined the worker thread: doing
+            # it earlier (while the thread could still be mid-callback into
+            # _handle_frame) let that in-flight call's setdefault() silently
+            # resurrect the entry with no future reconcile() left to clean it
+            # up again — a real bug found by re-review 2026-09-17.
+            with self._lock:
+                self._frame_counters.pop(cam_id, None)
+                self._analytics_health.pop(cam_id, None)
             logger.info("stopped worker for camera %s (no longer live)", cam_id)
 
     def stop_all(self) -> None:
