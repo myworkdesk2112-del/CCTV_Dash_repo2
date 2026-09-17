@@ -68,11 +68,17 @@ investment, not new capability design, to reach statewide scale:
 2. **Regional rollout** introduces Kafka and validates the Re-ID
    similarity-search-at-scale problem `SCALABILITY.md` §2 names as an
    explicitly unsolved problem at 80,000-camera volume (tens of billions
-   of embeddings) — this needs a real vector-search solution (e.g. a
-   proper ANN index) that the pilot's linear-scan approach doesn't
-   require yet. Flag this as the single hardest unresolved *technical*
-   problem in the whole roadmap, separate from the FRS/integration
-   *policy* questions above.
+   of embeddings) — this needs a real vector-search solution that the
+   pilot's linear-scan approach doesn't require yet. **Named 2026-09-17**
+   (see `RESEARCH.md`): pgvectorscale (PostgreSQL License, DiskANN-based,
+   no new database system) as the district/regional-scale interim step,
+   graduating to Milvus (Apache-2.0, designed for billion-scale ANN
+   search) at genuine statewide volume — both permissively licensed, no
+   AGPL conflict with `CLAUDE.md` §16's policy. Flag this as the single
+   hardest unresolved *technical* problem in the whole roadmap, separate
+   from the FRS/integration *policy* questions above — naming a
+   candidate technology doesn't resolve it; it's still unbuilt and
+   unvalidated at real volume.
 3. **Statewide (Model 4)** adds Triton/DeepStream inference serving,
    Kubernetes GPU orchestration, TimescaleDB, and the DR posture in
    `ARCHITECTURE.md` — by this point FRS/crowd-counting/govt-DB questions

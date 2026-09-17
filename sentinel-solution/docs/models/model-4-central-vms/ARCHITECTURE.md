@@ -77,6 +77,14 @@ existing 34 NETRAM centres), central (statewide). Model 4 adds:
 │    (tier definitions inherited from SCALABILITY.md §4, not redefined)│
 │  - Kafka: partitioned by camera_id (per-camera ordering), matching │
 │    SCALABILITY.md §6 step 3's regional-rollout introduction point  │
+│  - Milvus (Apache-2.0): billion-scale ANN vector search for cross- │
+│    camera Re-ID embeddings — see RESEARCH.md, named 2026-09-17 as  │
+│    the candidate for the roadmap's single hardest named technical  │
+│    problem (linear-scan embedding search doesn't work at this      │
+│    volume). pgvectorscale (PostgreSQL License, DiskANN-based) is   │
+│    the interim step at district/regional scale, requiring no new  │
+│    database system before a genuine statewide deployment graduates│
+│    to Milvus.                                                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -145,5 +153,6 @@ it would plug in — this is noted as a seam, not a commitment.
   cross-region with a slower RPO measured in hours, not minutes.
 
 See `IMPLEMENTATION_PLAN.md` for the phased rollout (inherits
-`SCALABILITY.md` §6 directly) and `REQUIREMENTS.md` for the literal
-spec-to-status mapping.
+`SCALABILITY.md` §6 directly), `REQUIREMENTS.md` for the literal
+spec-to-status mapping, and `SECURITY_ARCHITECTURE.md` for the dedicated
+security-architecture deliverable (CERT-In, MeitY/STQC, DPDP Act §17).

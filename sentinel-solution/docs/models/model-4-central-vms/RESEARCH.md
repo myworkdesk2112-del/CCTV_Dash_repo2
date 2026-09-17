@@ -139,6 +139,53 @@ different rollout shape, it fills in what analytics/governance decisions
 apply once that tier is reached (FRS excluded, crowd-counting/anomaly
 detection included, DR posture as above).
 
+## Vector search at Re-ID scale — the named hard technical problem, now with a candidate technology
+
+`IMPLEMENTATION_PLAN.md` names cross-camera Re-ID similarity search at
+80,000-camera volume (tens of billions of stored embeddings) as the
+single hardest unresolved *technical* problem in the whole roadmap, and
+previously left "a proper ANN index" unnamed. Researched 2026-09-17:
+
+- **FAISS** (Meta, MIT) is a library, not a deployable server — used
+  internally by other systems but not itself a production serving tier.
+- **Milvus** (Apache-2.0, LF AI & Data project) is purpose-built for
+  exactly this shape of problem: vendor/independent sources describe it
+  as designed for horizontal scaling past one billion vectors, with
+  multiple ANN index types (HNSW/IVF/PQ). **This is the candidate named
+  for genuine statewide scale.**
+- **Qdrant** (Apache-2.0, Rust, HNSW + strong metadata filtering) is a
+  credible alternative at the 10–100M-vector band.
+- **pgvector / pgvectorscale** (PostgreSQL License, Timescale) adds
+  DiskANN-based indexing directly onto PostgreSQL — this project's
+  existing database — and multiple independent 2026 comparisons rank it
+  competitive up to roughly 50–100M vectors. **This is the credible
+  *interim* step**: a district/regional-rollout-scale Re-ID search
+  upgrade that requires no new database system, before a genuine
+  statewide deployment would need to graduate to Milvus.
+- All four are permissively licensed (MIT/Apache-2.0/PostgreSQL
+  License) — consistent with this project's AGPL-avoidance policy
+  (`CLAUDE.md` §16), no additional licensing decision needed here.
+
+**Confidence caveat, stated honestly**: no independently-audited,
+neutral third-party production case study confirming a specific
+"largest known deployment size" was found for any of these — the
+"past one billion vectors" and "50–100M vector" figures above are
+vendor-reported/vendor-adjacent-benchmarked capability claims, not
+independently verified production evidence. Cite them as engineering
+sizing signal, not a proven number, exactly as `SCALABILITY.md` already
+does for its own compute/bandwidth estimates.
+
+Sources: [pgvector performance benchmarks — Instaclustr](https://www.instaclustr.com/education/vector-database/pgvector-performance-benchmark-results-and-5-ways-to-boost-performance/), [Postgres Vector Search Compared 2026](https://www.web3aiblog.com/blog/postgres-vector-search-compared-pgvector-pgvectorscale-paradedb-lantern-2026), [Postgres Won: 2026 Vector Database Guide — Statix](https://www.statix.az/blog/vector-database-selection-guide-2026-postgres-pgvector), [Best 17 Vector Databases 2026 — lakeFS](https://lakefs.io/blog/best-vector-databases/), [Comparing open source vector databases — Redis](https://redis.io/blog/best-open-source-vector-databases-comparison/), [pgvectorscale on GitHub](https://github.com/timescale/pgvectorscale), [Pgvector vs. Pinecone — Tiger Data](https://www.tigerdata.com/blog/pgvector-is-now-as-fast-as-pinecone-at-75-less-cost)
+
+## Security architecture — see the dedicated document
+
+A full statewide security-architecture research pass (CERT-In, MeitY/
+STQC, DPDP Act §17's law-enforcement provisions, ISO 27001 in real
+Indian government CCTV tenders) is written up separately in
+`SECURITY_ARCHITECTURE.md` rather than duplicated here, since
+`REQUIREMENTS.md` named a *dedicated* security architecture document as
+the missing Model 4 deliverable.
+
 ## Caveat
 
 Current 2026-specific figures for China's Skynet/Sharp Eyes and NYC/

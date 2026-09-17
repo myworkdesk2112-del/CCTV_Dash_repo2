@@ -47,7 +47,7 @@ Official spec text:
 | ANPR and vehicle-tracking demo | Already delivered at pilot scale | Same real demo evidence cited in Model 2's `REQUIREMENTS.md` — not re-demonstrated at Model 4 scale since no Model 4 infrastructure exists |
 | Scalability/load-test report for ~80,000 cameras | Delivered as a *sizing report*, not a *load test* | `SCALABILITY.md` — real capacity/bandwidth/cost arithmetic, explicitly not a load test against real infrastructure that doesn't exist. Don't conflate "we sized it" with "we tested it at that scale" |
 | Disaster-recovery design | Delivered as design | `ARCHITECTURE.md`'s DR posture section, inheriting `SCALABILITY.md` §4/§5's tier definitions |
-| Security architecture document | Partially covered | `HLD.md`'s security/RBAC sections cover pilot-scale posture; a dedicated statewide security architecture document doesn't exist separately and would be net-new work if requested |
+| Security architecture document | Delivered as design (2026-09-17) | `SECURITY_ARCHITECTURE.md` — real, cited Indian regulatory grounding (CERT-In's 2022 directions, MeitY/STQC empanelment and the PPO'24/CRO'24 CCTV-hardware mandate, DPDP Act 2023 §17's law-enforcement provisions), alongside `HLD.md`'s existing pilot-scale RBAC/security sections. A design/roadmap document, not a compliance claim or audit |
 
 ## What "roadmap-only" means, stated plainly
 
