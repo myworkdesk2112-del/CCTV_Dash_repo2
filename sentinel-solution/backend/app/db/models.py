@@ -93,6 +93,20 @@ class CameraRegistry(Base):
     analytics_degraded = Column(Boolean, nullable=True, default=None)
     last_analytics_success_at = Column(DateTime, nullable=True)
 
+    # Maintenance status (Model 1 deliverable — REQUIREMENTS_COVERAGE.md
+    # flagged this as the one open gap in "health/maintenance-status
+    # monitoring": is_healthy/analytics_degraded describe OBSERVED stream/
+    # analytics state, not a human decision that a camera is deliberately
+    # offline for servicing. Without this, a camera pulled down for repair
+    # looks identical to one that's actually broken/failed — see
+    # routes_cameras.py's gap-analysis, which now excludes an
+    # under_maintenance camera from the "unhealthy" (unexpected-failure)
+    # list rather than reporting it as a real gap. Set only via
+    # POST /cameras/{id}/maintenance (admin-only), never inferred.
+    under_maintenance = Column(Boolean, nullable=False, default=False)
+    maintenance_reason = Column(String, nullable=True)
+    maintenance_until = Column(DateTime, nullable=True)
+
     # Named-anomaly-alert config (see analytics/anomaly.py). Both opt-in,
     # per-camera, set at onboarding time — a camera with neither set never
     # produces anomaly alerts, only watchlist ones, same as before this

@@ -104,6 +104,11 @@ def _merged_camera_view(
             else None
         ),
         "last_seen_live_at": registry.last_seen_live_at.isoformat() if registry and registry.last_seen_live_at else None,
+        "under_maintenance": registry.under_maintenance if registry else False,
+        "maintenance_reason": registry.maintenance_reason if registry else None,
+        "maintenance_until": (
+            registry.maintenance_until.isoformat() if registry and registry.maintenance_until else None
+        ),
         "is_restricted_zone": registry.is_restricted_zone if registry else False,
         "expected_direction_deg": registry.expected_direction_deg if registry else None,
         "install_date": registry.install_date.isoformat() if registry and registry.install_date else None,
@@ -193,7 +198,16 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
     onboarded_not_live = sorted(set(registered) - set(live))
     missing_department = sorted(cid for cid, r in registered.items() if not r.department)
     missing_gis = sorted(cid for cid, r in registered.items() if r.latitude is None or r.longitude is None)
-    unhealthy = sorted(cid for cid, r in registered.items() if r.is_healthy is False)
+    # A camera deliberately taken down for servicing must not read as the
+    # same "unexpected failure" signal as a camera that's actually broken
+    # (REQUIREMENTS_COVERAGE.md's named Model 1 gap: "maintenance status"
+    # as a concept distinct from is_healthy). Reported separately below
+    # instead, so gap-analysis stays a genuine anomaly list, not a mix of
+    # real problems and expected, human-acknowledged downtime.
+    under_maintenance = sorted(cid for cid, r in registered.items() if r.under_maintenance)
+    unhealthy = sorted(
+        cid for cid, r in registered.items() if r.is_healthy is False and not r.under_maintenance
+    )
     missing_install_date = sorted(cid for cid, r in registered.items() if r.install_date is None)
     ageing_cutoff = dt.datetime.utcnow() - dt.timedelta(days=365.25 * config.CAMERA_AGEING_THRESHOLD_YEARS)
     ageing = sorted(cid for cid, r in registered.items() if r.install_date is not None and r.install_date < ageing_cutoff)
@@ -211,6 +225,7 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
         "missing_department": missing_department,
         "missing_gis_coordinates": missing_gis,
         "unhealthy": unhealthy,
+        "under_maintenance": under_maintenance,
         "missing_install_date": missing_install_date,
         "ageing": ageing,
         "ageing_threshold_years": config.CAMERA_AGEING_THRESHOLD_YEARS,
@@ -270,6 +285,7 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
         ["Missing department attribution", len(report["missing_department"])],
         ["Missing GIS coordinates", len(report["missing_gis_coordinates"])],
         ["Unhealthy", len(report["unhealthy"])],
+        ["Under maintenance", len(report["under_maintenance"])],
         ["Missing install date", len(report["missing_install_date"])],
         [f"Ageing (installed >{report['ageing_threshold_years']:g}y ago)", len(report["ageing"])],
     ]
@@ -306,6 +322,7 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
     _id_list_section("Missing department attribution", report["missing_department"])
     _id_list_section("Missing GIS coordinates", report["missing_gis_coordinates"])
     _id_list_section("Unhealthy", report["unhealthy"])
+    _id_list_section("Under maintenance", report["under_maintenance"])
     _id_list_section("Missing install date", report["missing_install_date"])
     _id_list_section(f"Ageing (installed >{report['ageing_threshold_years']:g}y ago)", report["ageing"])
 
@@ -403,12 +420,63 @@ def camera_audit_log(
         # SQLite's unspecified row order for ties (real bug caught by
         # test_camera_registry_model1.py's re-onboard test).
         .order_by(CameraAuditLog.created_at.desc(), CameraAuditLog.id.desc())
+        .limit(2000)
         .all()
     )
     return [
         {"user_id": e.user_id, "action": e.action, "created_at": e.created_at.isoformat()}
         for e in entries
     ]
+
+
+class MaintenanceUpdate(BaseModel):
+    under_maintenance: bool
+    reason: str | None = None
+    until: dt.datetime | None = None
+
+
+@router.post("/{camera_id}/maintenance")
+def set_maintenance_status(
+    camera_id: str,
+    body: MaintenanceUpdate,
+    db: Session = Depends(get_db),
+    admin: Principal = Depends(require_role("admin")),
+):
+    """Model 1's maintenance-status deliverable (REQUIREMENTS_COVERAGE.md's
+    one named open gap: is_healthy/analytics_degraded are OBSERVED stream/
+    analytics state, not a human decision that a camera is deliberately
+    offline for servicing). Admin-only, same as onboarding — this is a
+    registry-metadata write, not an observed signal, so it must be a
+    deliberate human action, never inferred from health state.
+
+    Setting under_maintenance=True does not touch is_healthy/
+    analytics_degraded themselves (those stay real observed signals); it
+    only changes how gap-analysis interprets an unhealthy reading for this
+    camera — see _compute_gap_analysis above."""
+    # No department-scope check here: this route is admin-only
+    # (require_role("admin")), and department_scope() always returns None
+    # for role=="admin" regardless of that key's own department field
+    # (see auth.py's department_scope docstring) — same reason
+    # onboard_camera/camera_audit_log above don't scope either.
+    registry = db.get(CameraRegistry, camera_id)
+    if registry is None:
+        raise HTTPException(status_code=404, detail=f"camera {camera_id} is not registered — onboard it first")
+
+    registry.under_maintenance = body.under_maintenance
+    registry.maintenance_reason = body.reason if body.under_maintenance else None
+    registry.maintenance_until = body.until if body.under_maintenance else None
+    db.add(CameraAuditLog(
+        camera_id=camera_id,
+        user_id=admin.user_id,
+        action="maintenance_set" if body.under_maintenance else "maintenance_cleared",
+    ))
+    db.commit()
+    return {
+        "id": camera_id,
+        "under_maintenance": registry.under_maintenance,
+        "maintenance_reason": registry.maintenance_reason,
+        "maintenance_until": registry.maintenance_until.isoformat() if registry.maintenance_until else None,
+    }
 
 
 @router.get("/export.csv")
@@ -431,7 +499,8 @@ def export_cameras_csv(
     writer = csv.writer(buf)
     writer.writerow([
         "id", "location", "department", "vendor", "camera_type", "latitude", "longitude",
-        "is_healthy", "last_seen_live_at", "is_restricted_zone", "expected_direction_deg",
+        "is_healthy", "last_seen_live_at", "under_maintenance", "maintenance_reason",
+        "is_restricted_zone", "expected_direction_deg",
         "install_date", "coverage_radius_m", "onboarded", "live",
     ])
     for cam_id in all_ids:
@@ -441,6 +510,7 @@ def export_cameras_csv(
         writer.writerow([
             row["id"], row["location"], row["department"], row["vendor"], row["camera_type"],
             row["latitude"], row["longitude"], row["is_healthy"], row["last_seen_live_at"],
+            row["under_maintenance"], row["maintenance_reason"],
             row["is_restricted_zone"], row["expected_direction_deg"], row["install_date"],
             row["coverage_radius_m"], row["onboarded"], row["live"],
         ])

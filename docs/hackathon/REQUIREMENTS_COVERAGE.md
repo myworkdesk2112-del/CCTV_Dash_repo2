@@ -11,9 +11,11 @@ claimed:
 - 🔵 **Deliberate scope-out** — intentionally not built, reason stated
 - 📄 **Doc/asset task** — no engineering, just needs producing/exporting
 
-Deadline: **2026-09-15** (Phase 1, updated 2026-09-05 — was 2026-09-07,
-confirmed via the live sentinel.gujarat.gov.in schedule; event moved to
-22–23 Sep). We are a **Model 1 + Model 2 hybrid**, with Model 3 (VMS
+Deadline: **2026-09-28** (Phase 1, updated 2026-09-17 — was 2026-09-15,
+confirmed via the live sentinel.gujarat.gov.in homepage; event moved to
+12–13 Oct 2026. Prior history: originally 2026-09-07, moved to 2026-09-15
+as of 2026-09-05 — this date has moved twice, re-check the live site before
+relying on it). We are a **Model 1 + Model 2 hybrid**, with Model 3 (VMS
 Federation) now also genuinely built as extra hybrid-architecture scope
 (**revised 2026-09-11** — see section C below and `STRATEGY.md`'s "Model
 choice" section); Model 4 remains documented roadmap, not built.
@@ -26,7 +28,7 @@ choice" section); Model 4 remains documented roadmap, not built.
 |---|---|---|
 | Registry portal with GIS map view | ✅ Done | React + Leaflet, health-colour-coded (`frontend/`, Model 1 tab) |
 | Bulk + manual + API onboarding | ✅ Done | `POST /cameras`, `/cameras/bulk`, Registry Ops form |
-| Camera health / maintenance-status monitoring | 🟡 Partial (health ✅, maintenance-status open) | `is_healthy`/`last_seen_live_at` from real RTSP worker state is real and done; **no separate "maintenance status" concept beyond healthy/unhealthy/unknown** (no AMC-ticket or scheduled-maintenance field) — flagged 2026-09-11 while ground-truthing `sentinel-solution/docs/models/model-1-registry-gis/REQUIREMENTS.md`, doesn't block the mandatory test case. **2026-09-13**: `is_healthy` was found to only reflect stream connectivity — a live torch/torchvision bug made analytics fail 100% while `is_healthy` stayed "ok". Added a separate `analytics_degraded`/`last_analytics_success_at` signal (`GET /cameras`, `/health`) so this can no longer be silently masked. |
+| Camera health / maintenance-status monitoring | ✅ Done | `is_healthy`/`last_seen_live_at` from real RTSP worker state is real and done. **2026-09-13**: `is_healthy` was found to only reflect stream connectivity — a live torch/torchvision bug made analytics fail 100% while `is_healthy` stayed "ok". Added a separate `analytics_degraded`/`last_analytics_success_at` signal (`GET /cameras`, `/health`) so this can no longer be silently masked. **2026-09-17**: closed the remaining "maintenance status" gap flagged 2026-09-11 — `CameraRegistry.under_maintenance`/`maintenance_reason`/`maintenance_until`, admin-only `POST /cameras/{id}/maintenance`, and gap-analysis now separates an intentionally-offline camera (`under_maintenance` category) from a genuinely unhealthy one, instead of reporting both the same way. LIVE/REAL VERIFIED against a running server (SQLite) and against real PostgreSQL (see `sentinel-solution/docs/MODEL1_MIGRATION_SCOPE.md` §9); AUTOMATED-TEST VERIFIED via 2 new pytest cases. |
 | Gap-analysis report for uncovered/ageing zones | ✅ Done | `GET /cameras/gap-analysis` + `GET /cameras/gap-analysis/export.pdf`; real sample PDF at `docs/assets/sample_gap_analysis_report.pdf`, generated against the live sandbox catalogue 2026-09-10 |
 | Role-based search/filter/export + metadata audit trail | ✅ Done | RBAC ✅; **department-scoped RBAC done 2026-09-05** (`api/auth.py`'s `department_scope`); **CSV export done 2026-09-05** (`GET /cameras/export.csv`); **backend search/filter query params done 2026-09-10** (`GET /cameras?department=&camera_type=&is_healthy=&live=&q=`, previously client-side-only/nonexistent); **camera-onboarding audit trail done 2026-09-10** (`CameraAuditLog` model, `GET /cameras/{id}/audit-log`, admin-only, records onboard vs. update per camera) |
 | Sample onboarded camera-metadata dataset | ✅ Done | 30 real sandbox cameras onboarded and confirmed live 2026-09-05 (`catalogue_size: 30`, all workers connected) |
