@@ -7,6 +7,15 @@ pydantic==2.9.2
 reportlab==4.2.5
 defusedxml==0.7.1
 
+# PostgreSQL driver for the production migration target (Model 1,
+# 2026-09-17 — see PRODUCTION_MIGRATION_PLAN.md). Only imported by
+# SQLAlchemy when DATABASE_URL points at postgresql://; the pilot's
+# default sqlite:///./sentinel.db never touches this. Binary wheel
+# (no local build toolchain needed) — the source distribution
+# (`psycopg2`, no `-binary`) is preferred for a real production install
+# per its own docs, but -binary is fine for dev/test.
+psycopg2-binary==2.9.9
+
 # Regression test suite (backend/tests/ — SWE-4). Self-contained, no camera
 # access or ML deps needed. Run from backend/: `python -m pytest tests -v`.
 pytest==9.1.1

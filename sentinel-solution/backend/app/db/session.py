@@ -37,10 +37,24 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 # this is a minimal, idempotent, additive migration: add the column only if
 # it isn't already present. Additive-only by design — it never drops or
 # rewrites data. (table, column, SQL column definition)
+#
+# Column-definition strings are written to be dialect-portable across
+# SQLite and PostgreSQL (Model 1 production migration, 2026-09-17):
+# "DATETIME" is not a real PostgreSQL type (only "TIMESTAMP" is), so every
+# entry uses "TIMESTAMP" instead — SQLite accepts it too, resolving to the
+# same NUMERIC type affinity DATETIME would have (SQLite's type affinity is
+# substring-matched, not a strict type system, and doesn't affect how
+# SQLAlchemy serializes datetimes at the ORM layer either way). Likewise a
+# boolean default is written as "DEFAULT FALSE", not "DEFAULT 0" — Postgres
+# has no implicit integer-to-boolean cast in a DEFAULT clause (removed in
+# PG 8.3), while SQLite has accepted the TRUE/FALSE keywords since 3.23
+# (2018), so this is portable both ways. NOT verified against a live
+# Postgres instance yet — see PRODUCTION_MIGRATION_PLAN.md Phase 1;
+# re-run this file's logic against a real Postgres DB before relying on it.
 _ADDITIVE_MIGRATIONS = [
     ("alert", "status", "VARCHAR DEFAULT 'new' NOT NULL"),
     ("alert", "status_updated_by", "VARCHAR"),
-    ("alert", "status_updated_at", "DATETIME"),
+    ("alert", "status_updated_at", "TIMESTAMP"),
     ("vehicle_event", "crop_path", "VARCHAR"),
     ("vehicle_event", "bbox_x1", "FLOAT"),
     ("vehicle_event", "bbox_y1", "FLOAT"),
@@ -48,19 +62,22 @@ _ADDITIVE_MIGRATIONS = [
     ("vehicle_event", "bbox_y2", "FLOAT"),
     ("vehicle_identity", "last_camera_id", "VARCHAR"),
     ("camera_registry", "camera_type", "VARCHAR"),
-    ("camera_registry", "is_restricted_zone", "BOOLEAN DEFAULT 0 NOT NULL"),
+    ("camera_registry", "is_restricted_zone", "BOOLEAN DEFAULT FALSE NOT NULL"),
     ("camera_registry", "expected_direction_deg", "FLOAT"),
     ("alert", "alert_type", "VARCHAR DEFAULT 'watchlist' NOT NULL"),
-    ("camera_registry", "install_date", "DATETIME"),
+    ("camera_registry", "install_date", "TIMESTAMP"),
     ("camera_registry", "coverage_radius_m", "FLOAT"),
-    ("vehicle_event", "ingested_at", "DATETIME"),
+    ("vehicle_event", "ingested_at", "TIMESTAMP"),
     ("vehicle_event", "storage_tier", "VARCHAR"),
     ("alert", "evidence_class", "VARCHAR"),
     ("alert", "evidence_class_reason", "VARCHAR"),
     ("camera_registry", "analytics_degraded", "BOOLEAN"),
-    ("camera_registry", "last_analytics_success_at", "DATETIME"),
+    ("camera_registry", "last_analytics_success_at", "TIMESTAMP"),
     ("camera_registry", "source_system", "VARCHAR"),
     ("camera_registry", "snapshot_image_url", "VARCHAR"),
+    ("camera_registry", "under_maintenance", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    ("camera_registry", "maintenance_reason", "VARCHAR"),
+    ("camera_registry", "maintenance_until", "TIMESTAMP"),
 ]
 
 
