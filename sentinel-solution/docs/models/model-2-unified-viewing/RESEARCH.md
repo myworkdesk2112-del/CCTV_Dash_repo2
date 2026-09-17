@@ -55,16 +55,79 @@ migration is recommended; the real remaining gap in the ANPR path is
 ## Live viewing: HLS vs. WebRTC/WHEP
 
 The suggested stack lists "WebRTC/HLS relay." We implement HLS-via-
-authenticated-proxy only. WebRTC (via WHEP, the sandbox's advertised
-protocol per `HACKATHON_DETAILS.md` §13a) gives sub-second glass-to-glass
-latency versus HLS's typical 6–15s segment-buffer latency — a real
-operational difference for a live police monitoring wall. This is a
-genuine, documented gap (not built this pass): the sandbox exposes both
-`cctv.corp8.cloud` (HLS/catalogue) and `103.250.160.189` (RTSP/WHEP) per
-§13a, so WHEP is reachable in principle. Deferred because HLS already
-satisfies the literal "unified viewer"/"video wall" deliverables and a
-WHEP client adds a second live-video code path to maintain under time
-pressure — see `IMPLEMENTATION_PLAN.md` for a scoped estimate if pursued.
+authenticated-proxy only. This is a genuine, documented gap (not built
+this pass): the sandbox exposes both `cctv.corp8.cloud` (HLS/catalogue)
+and `103.250.160.189` (RTSP/WHEP) per `HACKATHON_DETAILS.md` §13a, so
+WHEP is reachable in principle. Deferred because HLS already satisfies
+the literal "unified viewer"/"video wall" deliverables and a WHEP client
+adds a second live-video code path to maintain under time pressure — see
+`IMPLEMENTATION_PLAN.md` for a scoped estimate if pursued.
+
+**Latency figures, corrected 2026-09-17 (previously unsourced)**:
+
+- **Untuned/default HLS**: real-world citations put standard HLS
+  glass-to-glass latency at **~20–30 seconds**. The "~6–15s" figure this
+  document previously stated only holds for a *tuned* configuration
+  (short segments, small buffer window) — a legitimate engineering
+  assumption, but it should be labeled "tuned HLS," not presented as
+  HLS's typical out-of-the-box behavior. [Wowza: HLS latency](https://www.wowza.com/blog/hls-latency-sucks-but-heres-how-to-fix-it), [Mux: reduce live stream latency](https://www.mux.com/docs/guides/reduce-live-stream-latency)
+- **WHEP/WebRTC**: "sub-second" is accurate and well-supported — multiple
+  2025–2026 sources converge on **200ms–800ms glass-to-glass** for a
+  tuned WHIP→WHEP path, p50 <500ms/p95 <1.0s cited as realistic
+  production targets. [Cloudflare: WebRTC WHIP/WHEP sub-second](https://blog.cloudflare.com/webrtc-whip-whep-cloudflare-stream/), [AdaptNXT: MediaMTX WHIP/WHEP latency, 4 real deployments](https://www.adaptnxt.com/blogs/mediamtx-whip-whep-latency-benchmarks-4-deployments)
+- **Directly relevant named production case**: Wowza documents traffic
+  management centers using WebRTC/WHEP specifically to deliver
+  sub-second live camera video to operators — the same command-center/
+  traffic-monitoring use case this project targets, not a generic
+  entertainment-streaming example. [Wowza: Traffic Management Centers use WebRTC](https://www.wowza.com/blog/how-traffic-management-centers-use-webrtc-to-deliver-sub-second-live-video)
+- **A lower-effort middle option this document previously missed:
+  LL-HLS** (Low-Latency HLS, Apple's published extension) gets standard
+  HLS down to **~2–5s** without needing a full WebRTC/WHEP client — a
+  smaller change to the existing HLS-based proxy (`routes_stream.py`)
+  than standing up a new WebRTC code path. Worth considering as a
+  cheaper first step before M2-1's full WHEP build. [Streaming Media: LL-HLS/LL-DASH sub-3s](https://www.streamingmedia.com/Articles/Editorial/Spotlights/Low-latency-streaming-via-CDN-How-to-optimize-LL-HLS-and-LL-DASH-for-sub-3-second-latency-172056.aspx)
+
+## Per-camera homography calibration — real technique, real reference-distance source
+
+`IMPLEMENTATION_PLAN.md`'s M2-2 previously described the fix only as "a
+one-time per-camera homography (4 reference points)" with no cited
+technique. Researched 2026-09-17:
+
+- **Standard technique**: planar-homography ground-plane calibration —
+  well-established in traffic-vision literature. A fixed camera's
+  road-plane pixels are mapped to real-world metric coordinates via a
+  homography matrix fit from ≥4 known image↔ground-plane point
+  correspondences (lane markings, road edges); a tracked vehicle's
+  frame-to-frame ground-plane displacement over elapsed time (PTS,
+  matching this project's existing timing rule) then gives real-world
+  speed. [Robust Automatic Monocular Vehicle Speed Estimation (ICCV 2021)](https://openaccess.thecvf.com/content/ICCV2021/papers/Revaud_Robust_Automatic_Monocular_Vehicle_Speed_Estimation_for_Traffic_Surveillance_ICCV_2021_paper.pdf), [Monocular 3D Vehicle Detection Using Uncalibrated Traffic Cameras through Homography (arXiv)](https://arxiv.org/pdf/2103.15293), [Application of 2D Homography for Traffic Data Collection using CCTV (arXiv 2401.07220)](https://arxiv.org/pdf/2401.07220)
+- **OpenCV support**: `cv2.findHomography()` (already a dependency of
+  this project via `opencv-python`) computes the perspective-transform
+  matrix from ≥4 point pairs — no new dependency needed to implement
+  this. [LearnOpenCV homography tutorial](https://learnopencv.com/homography-examples-using-opencv-python-c/), [OpenCV official homography tutorial](https://docs.opencv.org/4.13.0/d1/de0/tutorial_py_feature_homography.html)
+- **Real prior work, independently checkable**: "A Multi-Vehicle Speed
+  Estimation Framework Using Line-Based Homography Transformation in
+  Static Traffic Videos" ([ETASR](https://etasr.com/index.php/ETASR/article/view/19490)); "Detection of 3D Bounding Boxes of
+  Vehicles Using Perspective Transformation for Accurate Speed
+  Measurement" ([arXiv 2003.13137](https://arxiv.org/pdf/2003.13137)).
+- **Accuracy — honestly a wide, condition-dependent spread, not one
+  number**: reported errors in the literature range from under ~1.5%
+  (a homography-based patent claim) up to ~20.9% mean absolute
+  percentage error (a YOLOv2+homography+tracking study), with other work
+  reporting 9.7–15.0% MAE. Dominant error drivers, consistently named
+  across sources: camera-to-road angle/height, calibration-point
+  precision, frame-rate/timestamp precision (this project's PTS-based
+  timing is the right foundation to build this on), lens distortion, and
+  a vehicle's body not being perfectly planar. **Do not cite a single
+  "accuracy" figure if this is built** — state a range with its sources,
+  consistent with this project's no-fabricated-precision rule.
+- **India-specific reference-distance source, verified real**: **IRC
+  086:2018** ("Geometric Design Standards for Urban Roads and Streets"),
+  a real, publicly downloadable Indian Roads Congress standard,
+  specifies a standard urban lane width of **3.5 m** (3 m for lower-order
+  access roads) — a legitimate, citable real-world reference distance for
+  calibration points on Indian traffic footage, not an assumption this
+  project would otherwise have to invent. [IRC 086:2018 full text (law.resource.org)](https://law.resource.org/pub/in/bis/irc/irc.gov.in.086.2018.pdf)
 
 ## ONVIF Profile M and multi-vendor metadata interoperability
 

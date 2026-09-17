@@ -41,33 +41,64 @@ submission blocker.
 
 ## Part 1 — worth doing if time allows (hardens a real, documented gap)
 
-### M2-1 — WHEP live-view path (see `RESEARCH.md`)
+### M2-1 — Live-view latency (see `RESEARCH.md`, latency figures corrected/sourced 2026-09-17)
 
-- [ ] **Add a WHEP client alongside the existing HLS proxy**, selectable
-      per camera or as a live-view toggle, targeting sub-second latency
-      versus HLS's 6–15s segment buffer. The sandbox already exposes WHEP
-      at `103.250.160.189` per `HACKATHON_DETAILS.md` §13a. Effort:
-      ~4–6 hrs (new backend proxy/signalling route mirroring
-      `routes_stream.py`'s auth pattern, frontend `<video>`+WebRTC
-      peer-connection component). **Risk:** a second live-video code path
-      to keep working under the same PTS/backoff/reconnect discipline as
-      the RTSP workers — don't half-build this if there isn't time to
-      also verify it against real sandbox WHEP endpoints.
+Two options now, not one — researched latency figures show a cheaper
+middle step exists between today's tuned HLS (~6–15s) and a full WHEP
+build (sub-second):
+
+- [x] **LL-HLS proxy transparency — done 2026-09-17.**
+      `routes_stream.py`'s `hls_playlist` now forwards the client's
+      blocking-reload directives (`_HLS_msn`/`_HLS_part`) upstream with a
+      longer timeout, and rewrites the `URI="..."` attribute on any tag
+      line (not just `EXT-X-KEY` as before) — so `EXT-X-PART`/
+      `EXT-X-PRELOAD-HINT` (partial segments) and `EXT-X-MAP` (fMP4 init
+      segment) route through the authenticated segment proxy instead of
+      404ing. 3 new tests (`tests/test_routes_stream_llhls.py`), full
+      suite 167/167 passing. **IMPLEMENTED, UNVERIFIED against a live
+      LL-HLS origin** — no such origin is reachable in this environment
+      to confirm the sandbox CDN actually emits LL-HLS tags; this makes
+      the proxy transparent to them if present, it doesn't prove the
+      sandbox produces them. Known gap: `BYTERANGE`-based partial
+      segments (an alternative delivery style to URI-per-part) aren't
+      forwarded.
+- [ ] **Full option: add a WHEP client alongside the existing HLS proxy**,
+      selectable per camera or as a live-view toggle, targeting
+      sub-second latency (200ms–800ms glass-to-glass is the realistic,
+      cited range for a tuned WHIP→WHEP path, not just "sub-second" as an
+      unsourced claim). The sandbox already exposes WHEP at
+      `103.250.160.189` per `HACKATHON_DETAILS.md` §13a. Effort: ~4–6 hrs
+      (new backend proxy/signalling route mirroring `routes_stream.py`'s
+      auth pattern, frontend `<video>`+WebRTC peer-connection component).
+      **Risk:** a second live-video code path to keep working under the
+      same PTS/backoff/reconnect discipline as the RTSP workers — don't
+      half-build this if there isn't time to also verify it against real
+      sandbox WHEP endpoints.
 
 ### M2-2 — Per-camera homography calibration for anomaly detection
 
 - [ ] **Calibrate `direction_deg`/`speed_px_per_s` to real-world units**
-      via a one-time per-camera homography (4 reference points → ground
-      plane), so wrong-way/stopped-in-restricted-zone alerts carry a real
-      speed estimate instead of an image-plane-relative one. Effort:
-      ~3–4 hrs (one calibration helper + a per-camera calibration record,
-      likely a new nullable JSON column on `CameraRegistry` or a small
-      new table — needs an additive migration either way). **Needs
-      real-world reference measurements per camera to be honest** —
-      don't fabricate calibration points for cameras never physically
-      surveyed; leave uncalibrated cameras reporting image-plane values
-      as today, just gate the "real-world speed" claim on calibration
-      being present.
+      via `cv2.findHomography()` (already a dependency, no new library
+      needed) fit from ≥4 known image↔ground-plane reference points per
+      camera — the standard, citable planar-homography technique used
+      throughout the traffic-vision literature, not an invented approach
+      (see `RESEARCH.md`, researched 2026-09-17). **India-specific
+      reference distance now identified**: IRC 086:2018 (Indian Roads
+      Congress) specifies a standard urban lane width of 3.5m — a real,
+      citable calibration reference for Indian traffic footage rather
+      than a guessed distance. Effort: ~3–4 hrs (one calibration helper +
+      a per-camera calibration record, likely a new nullable JSON column
+      on `CameraRegistry` or a small new table — needs an additive
+      migration either way). **Needs real-world reference measurements
+      per camera to be honest** — don't fabricate calibration points for
+      cameras never physically surveyed; leave uncalibrated cameras
+      reporting image-plane values as today, just gate the "real-world
+      speed" claim on calibration being present. **If this ships, report
+      accuracy as a range with sources, never a single number** — the
+      literature itself reports a wide, condition-dependent spread
+      (roughly 1.5%–20%+ MAPE depending on camera angle, calibration
+      precision, and frame-rate/timestamp precision), not a single
+      "X% accurate" figure.
 
 ### M2-3 — ONVIF Profile M readiness note (docs-only, no code)
 
