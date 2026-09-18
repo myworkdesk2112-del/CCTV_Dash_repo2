@@ -99,6 +99,7 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
   hlsUrl: (cameraId) => `${API_BASE}/live/${cameraId}/index.m3u8`,
+  whepUrl: (cameraId) => `${API_BASE}/live/${cameraId}/whep`,
 
   candidateCameras: (plate, purpose, caseId) => {
     const params = new URLSearchParams({ purpose });

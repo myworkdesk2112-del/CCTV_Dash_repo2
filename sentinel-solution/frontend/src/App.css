@@ -176,6 +176,19 @@
   text-align: center;
   padding: 20px;
 }
+.live-view__mode-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.live-view__mode-toggle button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.live-view__mode-toggle button:disabled {
+  font-weight: 600;
+  opacity: 1;
+}
 .live-view__video {
   width: 100%;
   background: #000;
