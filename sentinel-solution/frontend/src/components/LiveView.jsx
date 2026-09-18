@@ -33,6 +33,12 @@ export default function LiveView({ cameraId }) {
   const videoRef = useRef(null);
   const [error, setError] = useState(null);
   const [mode, setMode] = useState("hls");
+  // Starts muted (required for reliable autoplay in every browser we
+  // support), but WHEP already negotiates a real audio transceiver below —
+  // this just exposes the mute state most browsers already let a user
+  // toggle post-autoplay, since a multi-tile wall needs it per tile, not
+  // just via the native <video> element's own (easy to miss) controls.
+  const [muted, setMuted] = useState(true);
 
   useEffect(() => {
     setError(null);
@@ -151,8 +157,11 @@ export default function LiveView({ cameraId }) {
         <button type="button" disabled={mode === "whep"} onClick={() => setMode("whep")}>
           Low-latency (WHEP)
         </button>
+        <button type="button" className="live-view__mute-toggle" onClick={() => setMuted((previous) => !previous)} aria-label={muted ? "Unmute" : "Mute"}>
+          {muted ? "🔇" : "🔊"}
+        </button>
       </div>
-      <video ref={videoRef} controls autoPlay muted className="live-view__video" />
+      <video ref={videoRef} controls autoPlay muted={muted} className="live-view__video" />
       {error && <div className="live-view__error">{error} — feed may be offline or the sandbox session expired.</div>}
     </div>
   );

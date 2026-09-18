@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "./api";
+import { usePolling, useCameraPolling, useAlertPolling, useHealthPolling } from "./hooks/usePolling";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import CommandCenter from "./components/CommandCenter";
@@ -44,56 +45,16 @@ export default function App() {
   const [alerts, setAlerts] = useState([]);
   const [gapRefreshToken, setGapRefreshToken] = useState(0);
   const [pendingPlate, setPendingPlate] = useState("");
+  // Owned here, not inside LiveNetworkView, so the operator's video-wall
+  // composition survives switching away to check an alert and back —
+  // that component unmounts on every view change (see the comment below).
+  const [wallSelected, setWallSelected] = useState([]);
+  const [wallTileLimit, setWallTileLimit] = useState(4);
 
-  const refreshCameras = useCallback(async () => {
-    try {
-      setCameras(await api.listCameras());
-    } catch {
-      // catalogue endpoint is polled again shortly; a transient failure
-      // here isn't worth surfacing as an error banner
-    }
-  }, []);
-
-  const refreshGapAnalysis = useCallback(async () => {
-    try {
-      setGapAnalysis(await api.gapAnalysis());
-    } catch {
-      // same tolerance as cameras â€” real endpoint, real transient failures
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshCameras();
-    const id = setInterval(refreshCameras, CAMERA_POLL_MS);
-    return () => clearInterval(id);
-  }, [refreshCameras, gapRefreshToken]);
-
-  useEffect(() => {
-    refreshGapAnalysis();
-    const id = setInterval(refreshGapAnalysis, CAMERA_POLL_MS);
-    return () => clearInterval(id);
-  }, [refreshGapAnalysis, gapRefreshToken]);
-
-  useEffect(() => {
-    api.health().then(setHealth).catch(() => setHealth(null));
-    const id = setInterval(() => api.health().then(setHealth).catch(() => {}), CAMERA_POLL_MS);
-    return () => clearInterval(id);
-  }, []);
-
-  const refreshAlerts = useCallback(async () => {
-    try {
-      setAlerts(await api.listAlerts());
-    } catch {
-      // AlertsView has its own error handling for the detailed feed;
-      // this top-level poll only feeds the topbar/Command Center count.
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshAlerts();
-    const id = setInterval(refreshAlerts, ALERT_POLL_MS);
-    return () => clearInterval(id);
-  }, [refreshAlerts]);
+  const refreshCameras = useCameraPolling(api, setCameras, CAMERA_POLL_MS, [gapRefreshToken]);
+  const refreshGapAnalysis = usePolling(() => api.gapAnalysis(), setGapAnalysis, CAMERA_POLL_MS, [gapRefreshToken]);
+  useHealthPolling(api, setHealth, CAMERA_POLL_MS);
+  const refreshAlerts = useAlertPolling(api, setAlerts, ALERT_POLL_MS, []);
 
   const activeAlertCount = alerts.filter((a) => (a.status || "new") !== "resolved" && (a.status || "new") !== "dismissed").length;
 
@@ -125,7 +86,7 @@ export default function App() {
           }}
         />
         {/* Conditional mounting, not always-mounted+CSS-hidden: caught by
-            actually running this and watching the network tab â€” with every
+            actually running this and watching the network tab — with every
             view mounted at once, all 8+ screens' on-mount data-fetches fired
             simultaneously on page load, before the API key was ever set,
             producing a burst of guaranteed 401s and continuous background
@@ -136,7 +97,7 @@ export default function App() {
           <div className="view2 active">
             {view === "command" && <CommandCenter cameras={cameras} health={health} gapAnalysis={gapAnalysis} alerts={alerts} route={vehicleResult?.sightings} onOpenAlert={() => setView("alerts")} />}
             {view === "livemap" && <LiveMapView cameras={cameras} route={vehicleResult?.sightings} selectedCameraId={selectedCameraId} onSelectCamera={openCamera} />}
-            {view === "livenetwork" && <LiveNetworkView cameras={cameras} />}
+            {view === "livenetwork" && <LiveNetworkView cameras={cameras} alerts={alerts} selected={wallSelected} setSelected={setWallSelected} tileLimit={wallTileLimit} setTileLimit={setWallTileLimit} />}
             {view === "graph" && <GeoTemporalGraph cameras={cameras} initialPlate={pendingPlate} />}
             {view === "vehicle" && <VehicleIntelligence key={`vehicle-${pendingPlate}`} initialPlate={pendingPlate} onResult={setVehicleResult} onOpenGraph={openGraph} />}
             {view === "network" && (
@@ -173,7 +134,7 @@ export default function App() {
               <NotImplemented
                 title="Investigation Cases"
                 sub="Group sightings, alerts and evidence under a named case"
-                what="Sentinel already requires a case ID and a stated purpose on every vehicle lookup, and records both in the audit trail â€” but there is no case entity yet, so cases cannot be listed, reopened, or used to group evidence. Building the screen without that backend would mean inventing case records, which this project does not do."
+                what="Sentinel already requires a case ID and a stated purpose on every vehicle lookup, and records both in the audit trail — but there is no case entity yet, so cases cannot be listed, reopened, or used to group evidence. Building the screen without that backend would mean inventing case records, which this project does not do."
                 requires={[
                   "A Case model plus an additive migration (id, title, owner, status, created_at)",
                   "Linking the existing audit-log purpose/case_id entries to it",
@@ -186,8 +147,8 @@ export default function App() {
             {view === "anpr" && (
               <NotImplemented
                 title="ANPR Readiness"
-                sub="Whether a camera is physically capable of reading a plate â€” separate from whether it is online"
-                what="This is the highest-value missing screen. Our own cam01 produced 0 plate reads from 62 correctly-localised plates because the plate patch is roughly 25x16 px, against a requirement of at least 120x20 px that four independent vendors agree on. That is a provable geometric finding about the camera, not a failure of the OCR â€” but the backend does not yet measure or persist plate pixel dimensions, so there is nothing truthful to display."
+                sub="Whether a camera is physically capable of reading a plate — separate from whether it is online"
+                what="This is the highest-value missing screen. Our own cam01 produced 0 plate reads from 62 correctly-localised plates because the plate patch is roughly 25x16 px, against a requirement of at least 120x20 px that four independent vendors agree on. That is a provable geometric finding about the camera, not a failure of the OCR — but the backend does not yet measure or persist plate pixel dimensions, so there is nothing truthful to display."
                 requires={[
                   "Persist plate bounding-box width/height per localisation attempt",
                   "Per-camera OCR yield: localisations attempted vs pattern-valid reads",
