@@ -29,6 +29,7 @@ from .api import (
     routes_stream,
     routes_vehicle,
     routes_watchlist,
+    session_auth,
 )
 from .api.auth import ensure_default_admin_key
 from .api.rate_limit import RateLimitMiddleware
@@ -58,9 +59,18 @@ app.add_middleware(
     # WHEP client (LiveView.jsx) needs it from the POST /live/{id}/whep
     # response to know where to send the session teardown DELETE.
     expose_headers=["Location"],
+    # Required for the frontend's session cookie (api/session_auth.py,
+    # SEC-4) to be sent/received cross-origin at all — the browser
+    # silently drops Set-Cookie/Cookie on a cross-origin fetch()/XHR
+    # without this, even with credentials: "include" on the client side.
+    # Safe with a wildcard-free CORS_ALLOWED_ORIGINS (already the case,
+    # see config.py) — the spec forbids combining this with
+    # allow_origins=["*"], which this project already avoided per SWE-3.
+    allow_credentials=True,
 )
 
 app.include_router(routes_auth.router)
+app.include_router(session_auth.router)
 app.include_router(routes_cameras.router)
 app.include_router(routes_vehicle.router)
 app.include_router(routes_watchlist.router)
@@ -223,6 +233,7 @@ def on_startup():
                 session = SessionLocal()
                 try:
                     purge_expired(session)
+                    session_auth.purge_expired_sessions(session)
                 finally:
                     session.close()
             except Exception:  # noqa: BLE001 — a purge failure must not kill the loop

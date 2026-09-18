@@ -13,6 +13,15 @@ OAuth/session flow. That's an honest scope choice, not a hidden gap — see
 STRATEGY.md's OUT list philosophy: build the real minimal thing, not a fake
 elaborate one.
 
+**2026-09-18 addition (`SEC-4`, `docs/PRODUCTION_MIGRATION_PLAN.md` Phase
+4):** `get_principal` now also accepts `session_auth.py`'s httpOnly
+session cookie + CSRF token as a fallback when no `X-Sentinel-API-Key`
+header is present. Every existing route/test that uses the header key
+is completely unaffected — the header path is checked first and
+behaves identically. This is what lets the frontend migrate off
+`localStorage` (see `frontend/src/api.js`) without every route needing
+its own auth dependency.
+
 Roles (least to most privileged):
   viewer       — read cameras/GIS/live view only
   investigator — + purpose-bound vehicle search, watchlist read, alerts
@@ -25,7 +34,7 @@ import logging
 import secrets
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from ..db.models import ApiKeyEntry
@@ -48,15 +57,30 @@ class Principal:
 
 
 def get_principal(
+    request: Request,
     x_sentinel_api_key: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ) -> Principal:
-    if not x_sentinel_api_key:
-        raise HTTPException(401, "missing X-Sentinel-API-Key header")
-    entry = db.query(ApiKeyEntry).filter_by(key_hash=hash_key(x_sentinel_api_key)).first()
-    if entry is None:
-        raise HTTPException(401, "invalid API key")
-    return Principal(entry.user_id, entry.role, entry.department)
+    if x_sentinel_api_key:
+        entry = db.query(ApiKeyEntry).filter_by(key_hash=hash_key(x_sentinel_api_key)).first()
+        if entry is None:
+            raise HTTPException(401, "invalid API key")
+        return Principal(entry.user_id, entry.role, entry.department)
+
+    # No header key — fall back to the session-cookie path (SEC-4, see
+    # this module's docstring). Local import: session_auth.py imports
+    # Principal/hash_key from this module at load time, so a top-level
+    # import here would be circular.
+    from .session_auth import CSRF_HEADER_NAME, SESSION_COOKIE_NAME, get_principal_session
+
+    if not request.cookies.get(SESSION_COOKIE_NAME):
+        raise HTTPException(401, "missing X-Sentinel-API-Key header or session cookie")
+    return get_principal_session(
+        request=request,
+        db=db,
+        sentinel_session=request.cookies.get(SESSION_COOKIE_NAME),
+        x_sentinel_csrf_token=request.headers.get(CSRF_HEADER_NAME),
+    )
 
 
 def department_scope(principal: Principal) -> Optional[str]:

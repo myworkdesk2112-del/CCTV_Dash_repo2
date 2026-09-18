@@ -377,6 +377,34 @@ class ApiKeyEntry(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
+class SessionToken(Base):
+    """Production-hardening addition (2026-09-18, `SEC-4` in
+    `docs/REVIEW_FINDINGS.md` / Phase 4 of
+    `docs/PRODUCTION_MIGRATION_PLAN.md`) — an httpOnly-cookie session,
+    additive to `ApiKeyEntry`'s header-key model, not a replacement.
+    `api/auth.py`'s `get_principal` and every existing route/test are
+    unchanged; this is a second, opt-in authentication path
+    (`api/session_auth.py`).
+
+    Mints from an already-valid API key (`POST /auth/session/login`), so
+    it inherits that key's user_id/role/department rather than
+    duplicating the "who is this" decision in two places. Stored hashed,
+    same discipline as `ApiKeyEntry.key_hash` — a DB leak must not hand
+    out a working session any more than it hands out a working API key.
+    """
+
+    __tablename__ = "session_token"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_hash = Column(String, unique=True, index=True, nullable=False)
+    csrf_token = Column(String, nullable=False)
+    user_id = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    department = Column(String, nullable=True)
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+
 # Governed alert lifecycle (Palantir-Gotham-inspired entity lifecycle — see
 # ../../COMPETITIVE_TEARDOWN.md §A). An alert is a live investigation item,
 # not a fire-and-forget log line: it moves through explicit states, and only
