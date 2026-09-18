@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import StatusTag from "./StatusTag";
 import { IconCamera, IconAlert, IconLayers } from "../icons";
+import { clickableProps } from "../a11y";
 
 // Model 4 (Central VMS Model) prototype — NOT a Model 4 backend. Every
 // number in the "Current Pilot" section below comes from a real endpoint
@@ -90,8 +91,10 @@ export default function StatewideOverview({ cameras, health, alerts, onNavigate 
           {byDepartment.map(([dept, camList]) => (
             <div key={dept} style={{ marginLeft: 16 }}>
               <div
+                className="focusable-row"
                 style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "4px 0", fontSize: 12.5 }}
-                onClick={() => setExpandedDept(expandedDept === dept ? null : dept)}
+                aria-expanded={expandedDept === dept}
+                {...clickableProps(() => setExpandedDept(expandedDept === dept ? null : dept))}
               >
                 <span style={{ color: "var(--text-dim)" }}>{expandedDept === dept ? "▾" : "▸"}</span>
                 <strong>{dept}</strong>
@@ -101,7 +104,8 @@ export default function StatewideOverview({ cameras, health, alerts, onNavigate 
                 <div style={{ marginLeft: 24, display: "flex", flexDirection: "column", gap: 2 }}>
                   {camList.map((cam) => (
                     <div key={cam.id} style={{ fontSize: 12, color: "var(--text-dim)", display: "flex", gap: 8 }}>
-                      <span style={{ color: cam.is_healthy ? "var(--confirmed)" : "var(--danger)" }}>●</span>
+                      <span style={{ color: cam.is_healthy ? "var(--confirmed)" : "var(--danger)" }} title={cam.is_healthy ? "healthy" : "unhealthy"} aria-hidden="true">●</span>
+                      <span className="sr-only">{cam.is_healthy ? "healthy" : "unhealthy"}</span>
                       <span>{cam.id}</span>
                       <span>— {cam.location || "unknown location"}</span>
                     </div>

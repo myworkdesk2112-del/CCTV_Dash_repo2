@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 // Shared LIVE / PILOT / DESIGN TARGET badge for every Model 4 screen —
 // one definition so the three meanings stay visually consistent instead of
 // each screen inventing its own colour convention.
@@ -15,7 +17,7 @@ const KIND = {
   DESIGN_TARGET: { label: "DESIGN TARGET", color: "var(--text-dim)", bg: "rgba(107, 118, 132, 0.14)" },
 };
 
-export default function StatusTag({ kind, style }) {
+const StatusTag = memo(function StatusTag({ kind, style }) {
   const k = KIND[kind] || KIND.DESIGN_TARGET;
   return (
     <span
@@ -25,4 +27,5 @@ export default function StatusTag({ kind, style }) {
       {k.label}
     </span>
   );
-}
+});
+export default StatusTag;

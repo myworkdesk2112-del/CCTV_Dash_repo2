@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { clickableProps } from "../a11y";
 
 // Operational health ONLY — deliberately separate from ANPR readiness.
 // A camera can be perfectly healthy (streaming, stable, online) and still
@@ -62,7 +63,7 @@ export default function CameraHealthView({ cameras, onOpenCamera }) {
 
       <div className="grid4">
         {STATES.map((s) => (
-          <div className="card2 kpi-row2" key={s} style={{ cursor: "pointer" }} onClick={() => setFilter(s)}>
+          <div className="card2 kpi-row2 focusable-row" key={s} style={{ cursor: "pointer" }} {...clickableProps(() => setFilter(s))}>
             <div>
               <div className="kpi2-val" style={{ color: stateColor(s) }}>{counts[s]}</div>
               <div className="kpi2-lbl">{s}</div>
@@ -105,8 +106,9 @@ export default function CameraHealthView({ cameras, onOpenCamera }) {
               return (
                 <tr
                   key={cam.id}
+                  className={onOpenCamera ? "focusable-row" : undefined}
                   style={{ borderBottom: "1px solid var(--border)", cursor: onOpenCamera ? "pointer" : "default" }}
-                  onClick={() => onOpenCamera?.(cam.id)}
+                  {...(onOpenCamera ? clickableProps(() => onOpenCamera(cam.id)) : {})}
                 >
                   <td style={{ padding: "10px", fontWeight: 600 }}>{cam.id}</td>
                   <td style={{ padding: "10px", color: stateColor(state), fontWeight: 600 }}>{state}</td>

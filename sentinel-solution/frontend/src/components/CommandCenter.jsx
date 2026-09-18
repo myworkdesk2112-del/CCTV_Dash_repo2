@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { api } from "../api";
 import MapView from "./MapView";
 import { IconCamera, IconCar, IconAlert, IconVehicleSide } from "../icons";
+import { clickableProps } from "../a11y";
 
 const POLL_MS = 8000;
 
-function DetectionThumbnail({ eventId, hasImage, watchlisted }) {
+const DetectionThumbnail = memo(function DetectionThumbnail({ eventId, hasImage, watchlisted }) {
   const [url, setUrl] = useState(null);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ function DetectionThumbnail({ eventId, hasImage, watchlisted }) {
   }, [eventId, hasImage]);
 
   return <div className={`vehicle-thumb2 ${watchlisted ? "watch2" : ""}`}>{url ? <img src={url} alt="Evidence crop" /> : <IconVehicleSide />}</div>;
-}
+});
 
 // Deliberately real-numbers-only: no fabricated "GPU load" / "storage %"
 // gauges here — we have no telemetry source for those. Every KPI below
@@ -118,7 +119,7 @@ export default function CommandCenter({ cameras, health, gapAnalysis, alerts, ro
           {activeAlerts[0] && (
             <div className="card2">
               <div className="card-h2"><h2>Live alert</h2></div>
-              <div className="alert-item alert-item--new" style={{ cursor: "pointer" }} onClick={() => onOpenAlert?.()}>
+              <div className="alert-item alert-item--new" style={{ cursor: "pointer" }} {...clickableProps(() => onOpenAlert?.())}>
                 <div>
                   <strong>{activeAlerts[0].plate}</strong> at <strong>{activeAlerts[0].camera_id}</strong>
                   <div className="alert-item__reason">{activeAlerts[0].reason}</div>

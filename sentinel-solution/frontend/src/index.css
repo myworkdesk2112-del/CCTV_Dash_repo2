@@ -2,6 +2,23 @@
    Deliberately dark, dense, low-chrome "command center" styling — this is
    an investigator's tool, not a consumer dashboard. Dark is the only mode:
    a real ops room doesn't switch to light theme at noon. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* A div/tr acting as a button via a11y.js's clickableProps — gives it the
+   focus ring a real <button> would get for free. */
+.focusable-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 :root {
   --bg: #0a0d12;
   --bg-elevated: #0e131b;
