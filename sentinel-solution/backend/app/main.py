@@ -49,7 +49,15 @@ app = FastAPI(title="Sentinel — Unified CCTV Viewing & Analytics (Model 1 + 2)
 # for a browser caller to see it as a 429, not a CORS failure.
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
-    CORSMiddleware, allow_origins=config.CORS_ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware,
+    allow_origins=config.CORS_ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    # `Location` isn't on the CORS-safelisted response-header list, so
+    # without this the browser silently can't read it — the frontend's
+    # WHEP client (LiveView.jsx) needs it from the POST /live/{id}/whep
+    # response to know where to send the session teardown DELETE.
+    expose_headers=["Location"],
 )
 
 app.include_router(routes_auth.router)

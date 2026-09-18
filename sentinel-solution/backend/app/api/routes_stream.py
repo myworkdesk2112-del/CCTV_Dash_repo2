@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+import requests
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from ..catalogue import catalogue
+from ..catalogue import catalogue, with_stream_auth
 from ..db.models import CameraRegistry
 from .auth import Principal, department_scope, require_role
 from .deps import get_db
@@ -144,3 +145,121 @@ def hls_segment(
 
     content_type = resp.headers.get("Content-Type", "video/mp2t")
     return Response(content=resp.content, media_type=content_type)
+
+
+# WHEP timeout: signaling only (SDP offer/answer exchange), so this should
+# resolve in well under a second on a healthy media server — 10s just
+# bounds a genuinely stuck upstream, same as the HLS proxy's default.
+_WHEP_TIMEOUT_S = 10
+
+
+def _whep_host(whep_url: str) -> tuple[str | None, int | None]:
+    parsed = urlparse(whep_url)
+    return parsed.hostname, parsed.port
+
+
+@router.post("/{camera_id}/whep")
+async def whep_offer(
+    camera_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_role("viewer")),
+):
+    """Proxies only the WHEP signaling exchange (SDP offer in, SDP answer
+    out). Unlike the HLS proxy above, this adds no ONGOING per-segment
+    relay load: once the answer is returned, the actual SRTP media flows
+    directly browser<->media-server (WebRTC's own nature — the CDN/backend
+    cannot sit in that path anyway), so this satisfies "don't load the
+    system" by construction, not by tuning.
+
+    RTSP/WHEP require `email:password@` embedded in the URL
+    (catalogue.py's `_rtsp_auth_prefix`) — a different auth model from
+    HLS's CDN cookie session, so this cannot reuse
+    `catalogue.authenticated_get`. `requests` extracts and sends that
+    embedded userinfo as HTTP Basic auth automatically and strips it from
+    the wire URL, so the credential is used but never logged or returned.
+
+    Known gap: no PATCH trickle-ICE support — only the initial offer/
+    answer and DELETE teardown are proxied (see `whep_teardown` below).
+    Most WHEP media servers (e.g. MediaMTX) also support "vanilla" ICE
+    (all candidates gathered before the answer is sent), so this still
+    connects, just without trickle's faster connection setup. IMPLEMENTED,
+    UNVERIFIED — no live WHEP-producing origin is reachable here to
+    confirm end-to-end against a real media server, same caveat as the
+    LL-HLS proxy above."""
+    _scoped_camera_or_404(camera_id, db, principal)
+    cam = catalogue.get(camera_id)
+    if cam is None:
+        raise HTTPException(404, "unknown camera id — check /cameras")
+
+    offer_sdp = await request.body()
+    try:
+        resp = requests.post(
+            cam.whep_url,
+            data=offer_sdp,
+            headers={"Content-Type": "application/sdp"},
+            timeout=_WHEP_TIMEOUT_S,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface as a clean 502, not a stack trace
+        logger.warning("WHEP offer failed for %s: %s", camera_id, exc)
+        raise HTTPException(502, f"upstream WHEP offer failed: {exc}") from None
+
+    if resp.status_code not in (200, 201):
+        raise HTTPException(502, f"upstream WHEP endpoint returned {resp.status_code}")
+
+    response_headers = {}
+    location = resp.headers.get("Location")
+    if location:
+        # urljoin(cam.whep_url, location) resolves a path-absolute Location
+        # against cam.whep_url's full authority, WHICH INCLUDES the
+        # embedded email:password userinfo — strip it back out before this
+        # ever reaches the browser. The credential is re-attached
+        # server-side by with_stream_auth() when whep_teardown proxies the
+        # DELETE, so the browser only ever needs the stripped form to
+        # round-trip the session identity.
+        upstream_session_url = urljoin(cam.whep_url, location)
+        parsed_session_url = urlparse(upstream_session_url)
+        if "@" in parsed_session_url.netloc:
+            stripped_netloc = parsed_session_url.netloc.rsplit("@", 1)[1]
+            upstream_session_url = parsed_session_url._replace(netloc=stripped_netloc).geturl()
+        response_headers["Location"] = (
+            f"/live/{camera_id}/whep/session?u={quote(upstream_session_url, safe='')}"
+        )
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type="application/sdp",
+        headers=response_headers,
+    )
+
+
+@router.delete("/{camera_id}/whep/session")
+def whep_teardown(
+    camera_id: str,
+    u: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_role("viewer")),
+):
+    """Ends a WHEP session the browser is finished with. `u` is client-
+    supplied (round-tripped from `whep_offer`'s rewritten Location), so it
+    MUST be restricted to this camera's own WHEP host before being fetched
+    — same SSRF guard as `hls_segment`'s `u` param above. Best-effort: a
+    failed teardown here just means the media server's own idle timeout
+    cleans up the session later, not a client-visible error worth failing
+    loudly over."""
+    _scoped_camera_or_404(camera_id, db, principal)
+    cam = catalogue.get(camera_id)
+    if cam is None:
+        raise HTTPException(404, "unknown camera id")
+
+    expected_host, expected_port = _whep_host(cam.whep_url)
+    parsed_u = urlparse(u)
+    if parsed_u.hostname != expected_host or parsed_u.port != expected_port:
+        raise HTTPException(400, "session url host does not match this camera's WHEP host")
+
+    try:
+        resp = requests.delete(with_stream_auth(u), timeout=_WHEP_TIMEOUT_S)
+        return Response(status_code=resp.status_code)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("WHEP teardown failed for %s (%s): %s", camera_id, u, exc)
+        return Response(status_code=204)

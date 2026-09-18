@@ -11,13 +11,36 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import requests
 
 from . import config
 
 logger = logging.getLogger("sentinel.catalogue")
+
+
+def with_stream_auth(url: str) -> str:
+    """Re-embeds this deployment's RTSP/WHEP credentials into an upstream-
+    supplied URL that arrives WITHOUT them — a WHEP session's `Location`
+    header names the media server's own path, not the credentialed URL the
+    initial offer was POSTed to. Used by routes_stream.py's WHEP proxy so
+    the subsequent DELETE (session teardown) stays authenticated without
+    ever handing the credential to the browser: only the credential-
+    stripped session URL round-trips through the client (see
+    hls_segment's same host-allowlist precedent for why a client-supplied
+    URL must never be fetched as-is).
+
+    A no-op if credentials aren't configured, or if the URL already carries
+    its own userinfo (defensive — shouldn't happen for a same-host media
+    server's own Location header)."""
+    auth = _rtsp_auth_prefix()
+    if not auth:
+        return url
+    parsed = urlparse(url)
+    if "@" in parsed.netloc:
+        return url
+    return parsed._replace(netloc=f"{auth}{parsed.netloc}").geturl()
 
 
 def _rtsp_auth_prefix() -> str:
