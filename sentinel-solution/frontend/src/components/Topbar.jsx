@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, getApiKey, setApiKey } from "../api";
+import { api, hasSessionHint } from "../api";
 import { IconShield, IconSearch, IconBell } from "../icons";
 
 export default function Topbar({ health, activeAlertCount, onSearchSubmit, onAuthenticated }) {
-  const [key, setKey] = useState(getApiKey());
+  const [key, setKey] = useState("");
   const [identity, setIdentity] = useState(null);
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
@@ -13,9 +13,9 @@ export default function Topbar({ health, activeAlertCount, onSearchSubmit, onAut
       setIdentity(await api.whoami());
       setError(null);
       // The key may have just been set — App's data polls started at mount
-      // (before any key existed) and won't retry until their next interval
-      // tick, which can land well after a screen has already been shown.
-      // Trigger an immediate refresh so screens don't wait out that gap.
+      // (before any session existed) and won't retry until their next
+      // interval tick, which can land well after a screen has already been
+      // shown. Trigger an immediate refresh so screens don't wait out that gap.
       onAuthenticated?.();
     } catch (err) {
       setIdentity(null);
@@ -24,12 +24,23 @@ export default function Topbar({ health, activeAlertCount, onSearchSubmit, onAut
   }
 
   useEffect(() => {
-    if (getApiKey()) checkIdentity();
+    if (hasSessionHint()) checkIdentity();
   }, []);
 
-  function saveKey() {
-    setApiKey(key.trim());
-    checkIdentity();
+  async function signIn() {
+    setError(null);
+    try {
+      await api.login(key.trim());
+      setKey("");
+      await checkIdentity();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function signOut() {
+    await api.logout();
+    setIdentity(null);
   }
 
   return (
@@ -90,18 +101,19 @@ export default function Topbar({ health, activeAlertCount, onSearchSubmit, onAut
               <b style={{ display: "block", color: "var(--text-h)" }}>{identity.user_id}</b>
               <span style={{ color: "var(--text-dim)", fontSize: 9.5 }}>{identity.role}</span>
             </div>
+            <button className="btn2" style={{ padding: "3px 8px", fontSize: 10.5 }} onClick={signOut}>Sign out</button>
           </>
         ) : (
           <>
             <input
               type="password"
-              placeholder="X-Sentinel-API-Key"
+              placeholder="API key"
               value={key}
               onChange={(e) => setKey(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && saveKey()}
+              onKeyDown={(e) => e.key === "Enter" && signIn()}
               style={{ background: "none", border: "none", color: "var(--text-h)", fontSize: 11, width: 130 }}
             />
-            <button className="btn2" style={{ padding: "3px 8px", fontSize: 10.5 }} onClick={saveKey}>Set</button>
+            <button className="btn2" style={{ padding: "3px 8px", fontSize: 10.5 }} onClick={signIn}>Sign in</button>
           </>
         )}
       </div>

@@ -1,21 +1,62 @@
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
-const API_KEY_STORAGE_KEY = "sentinel_api_key";
 
-export function getApiKey() {
-  return localStorage.getItem(API_KEY_STORAGE_KEY) || "";
+// 2026-09-18b (SEC-4, docs/PRODUCTION_MIGRATION_PLAN.md Phase 4): the
+// long-lived API key no longer lives in localStorage — a real XSS on
+// this app would otherwise be able to read it outright. Auth is now an
+// httpOnly session cookie (unreadable by page JS at all) set by
+// POST /auth/session/login, plus a separate, deliberately-NOT-httpOnly
+// CSRF cookie this file reads and echoes back on every mutating
+// request (the standard "double-submit cookie" CSRF pattern — see
+// backend/app/api/session_auth.py's docstring for the full rationale).
+const CSRF_COOKIE_NAME = "sentinel_csrf";
+
+export function getCsrfToken() {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : "";
 }
 
-export function setApiKey(key) {
-  if (key) localStorage.setItem(API_KEY_STORAGE_KEY, key);
-  else localStorage.removeItem(API_KEY_STORAGE_KEY);
+// Best-effort "was a session ever established" hint for the UI (e.g.
+// deciding whether to show the login form on first paint) — the
+// session cookie itself is httpOnly and unreadable here, so this reads
+// the CSRF cookie's mere presence instead. It is NOT the source of
+// truth for whether the session is actually still valid server-side
+// (it could be expired) — api.whoami() remains that source of truth,
+// exactly as before this change.
+export function hasSessionHint() {
+  return Boolean(getCsrfToken());
+}
+
+async function login(apiKey) {
+  const res = await fetch(`${API_BASE}/auth/session/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_key: apiKey }),
+  });
+  if (!res.ok) {
+    throw new Error(res.status === 401 ? "401 invalid API key" : `${res.status} login failed`);
+  }
+  return res.json();
+}
+
+async function logout() {
+  await fetch(`${API_BASE}/auth/session/logout`, { method: "POST", credentials: "include" });
+}
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function withAuth(options = {}) {
+  const method = (options.method || "GET").toUpperCase();
+  const headers = { ...(options.headers || {}) };
+  if (MUTATING_METHODS.has(method)) {
+    const csrf = getCsrfToken();
+    if (csrf) headers["X-Sentinel-CSRF-Token"] = csrf;
+  }
+  return { ...options, method, headers, credentials: "include" };
 }
 
 async function request(path, options = {}) {
-  const apiKey = getApiKey();
-  const headers = { ...(options.headers || {}) };
-  if (apiKey) headers["X-Sentinel-API-Key"] = apiKey;
-
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE}${path}`, withAuth(options));
   if (!res.ok) {
     let detail;
     try {
@@ -23,37 +64,35 @@ async function request(path, options = {}) {
     } catch {
       detail = res.statusText;
     }
-    if (res.status === 401) throw new Error("401 missing/invalid API key — set one above");
+    if (res.status === 401) throw new Error("401 not signed in — set an API key above");
     if (res.status === 403) throw new Error(`403 your role can't do this (${detail || "insufficient permissions"})`);
     throw new Error(`${res.status} ${detail || ""}`.trim());
   }
   return res.json();
 }
 
+async function downloadBlob(path, filename) {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`${res.status} failed to generate file`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   base: API_BASE,
+  login,
+  logout,
   health: () => request("/health"),
   whoami: () => request("/auth/whoami"),
   listCameras: () => request("/cameras"),
   getCamera: (id) => request(`/cameras/${id}`),
   gapAnalysis: () => request("/cameras/gap-analysis"),
-  // The API key lives in a custom header, not a cookie, so a plain <a href>
-  // download can't authenticate — fetch the PDF as a blob and trigger a
-  // client-side download instead.
-  downloadGapAnalysisPdf: async () => {
-    const apiKey = getApiKey();
-    const headers = {};
-    if (apiKey) headers["X-Sentinel-API-Key"] = apiKey;
-    const res = await fetch(`${API_BASE}/cameras/gap-analysis/export.pdf`, { headers });
-    if (!res.ok) throw new Error(`${res.status} failed to generate PDF`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "sentinel_gap_analysis.pdf";
-    a.click();
-    URL.revokeObjectURL(url);
-  },
+  downloadGapAnalysisPdf: () => downloadBlob("/cameras/gap-analysis/export.pdf", "sentinel_gap_analysis.pdf"),
   onboardCamera: (camera) =>
     request("/cameras", {
       method: "POST",
@@ -109,13 +148,11 @@ export const api = {
   lastDetection: (cameraId) => request(`/cameras/${cameraId}/last-detection`),
   cameraStats: (cameraId) => request(`/cameras/${encodeURIComponent(cameraId)}/stats`),
   eventCropUrl: (eventId) => `${API_BASE}/vehicle/event/${eventId}/crop`,
-  // Auth'd image fetch — API key is a header, not a query param, so an
-  // <img src> can't carry it. Fetch as a blob and hand back an object URL.
+  // Auth'd image fetch — the session is a cookie, not a header, but an
+  // <img src> still can't send credentials by default. Fetch as a blob
+  // and hand back an object URL, same shape as before.
   eventCropBlobUrl: async (eventId) => {
-    const apiKey = getApiKey();
-    const res = await fetch(`${API_BASE}/vehicle/event/${eventId}/crop`, {
-      headers: apiKey ? { "X-Sentinel-API-Key": apiKey } : {},
-    });
+    const res = await fetch(`${API_BASE}/vehicle/event/${eventId}/crop`, { credentials: "include" });
     if (!res.ok) throw new Error(`${res.status}`);
     return URL.createObjectURL(await res.blob());
   },
@@ -136,18 +173,6 @@ export const api = {
   },
 
   federationCorrelations: () => request("/federation/correlations"),
-  downloadFederationReportPdf: async () => {
-    const apiKey = getApiKey();
-    const headers = {};
-    if (apiKey) headers["X-Sentinel-API-Key"] = apiKey;
-    const res = await fetch(`${API_BASE}/federation/correlations/export.pdf`, { headers });
-    if (!res.ok) throw new Error(`${res.status} failed to generate PDF`);
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "sentinel_federation_report.pdf";
-    a.click();
-    URL.revokeObjectURL(url);
-  },
+  downloadFederationReportPdf: () =>
+    downloadBlob("/federation/correlations/export.pdf", "sentinel_federation_report.pdf"),
 };

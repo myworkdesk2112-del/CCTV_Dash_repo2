@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { api, getApiKey } from "../api";
+import { api, getCsrfToken } from "../api";
 
 // Non-trickle ICE only: the backend's WHEP proxy (routes_stream.py) proxies
 // just the initial offer/answer exchange, not PATCH trickle candidates (see
@@ -47,11 +47,11 @@ export default function LiveView({ cameraId }) {
       hls = new Hls({
         maxBufferLength: 10,
         // /live/* is RBAC-gated (routes_stream.py) — hls.js's own fetches
-        // for the playlist and every segment need the API key header too,
-        // not just the initial <video> element.
+        // for the playlist and every segment need the session cookie too,
+        // not just the initial <video> element. withCredentials, not a
+        // header, now that auth is a cookie (SEC-4, 2026-09-18b).
         xhrSetup: (xhr) => {
-          const key = getApiKey();
-          if (key) xhr.setRequestHeader("X-Sentinel-API-Key", key);
+          xhr.withCredentials = true;
         },
       });
       hls.loadSource(src);
@@ -60,10 +60,12 @@ export default function LiveView({ cameraId }) {
         if (data.fatal) setError(`stream error: ${data.details}`);
       });
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Native Safari HLS cannot send Sentinel's required custom API-key
-      // header. Do not assign src and leave an opaque blank player: a
-      // signed-URL/cookie auth design is required to support this path.
-      setError("Live view requires Chrome, Firefox, or Edge in this environment (Safari native HLS cannot send the required API key).");
+      // Native Safari HLS's own request pipeline is a separate code path
+      // from fetch/XHR and has known, inconsistent cross-origin cookie
+      // behavior across Safari versions — not verified to reliably carry
+      // the session cookie. Do not assign src and leave an opaque blank
+      // player: fail with an honest message instead.
+      setError("Live view requires Chrome, Firefox, or Edge in this environment (Safari's native HLS player is not verified to carry the session cookie).");
     } else {
       setError("this browser cannot play HLS");
     }
@@ -99,12 +101,13 @@ export default function LiveView({ cameraId }) {
       await waitForIceGatheringComplete(pc);
       if (cancelled) return;
 
-      const apiKey = getApiKey();
       const headers = { "Content-Type": "application/sdp" };
-      if (apiKey) headers["X-Sentinel-API-Key"] = apiKey;
+      const csrf = getCsrfToken();
+      if (csrf) headers["X-Sentinel-CSRF-Token"] = csrf;
 
       const res = await fetch(api.whepUrl(cameraId), {
         method: "POST",
+        credentials: "include",
         headers,
         body: pc.localDescription.sdp,
       });
@@ -126,12 +129,11 @@ export default function LiveView({ cameraId }) {
       cancelled = true;
       pc?.close();
       if (teardownUrl) {
-        const apiKey = getApiKey();
-        const headers = {};
-        if (apiKey) headers["X-Sentinel-API-Key"] = apiKey;
+        const csrf = getCsrfToken();
+        const headers = csrf ? { "X-Sentinel-CSRF-Token": csrf } : {};
         // Best-effort: an idle WHEP session on the media server times out
         // on its own even if this never lands (e.g. tab closed mid-flight).
-        fetch(teardownUrl, { method: "DELETE", headers }).catch(() => {});
+        fetch(teardownUrl, { method: "DELETE", credentials: "include", headers }).catch(() => {});
       }
     };
   }, [cameraId, mode]);
