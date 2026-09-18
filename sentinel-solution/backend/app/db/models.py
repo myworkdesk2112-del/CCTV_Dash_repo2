@@ -131,6 +131,23 @@ class CameraRegistry(Base):
     # map renders no circle for it rather than a misleading dot-sized one.
     coverage_radius_m = Column(Float, nullable=True)
 
+    # Homography calibration (analytics/calibration.py) — turns
+    # VehicleEvent.speed_px_per_s's honest image-plane number into a real
+    # km/h for investigators, WITHOUT changing the anomaly thresholds in
+    # config.py (those stay tuned in px/s terms; see anomaly.py). NULL
+    # until an admin submits >=4 real surveyed point correspondences via
+    # POST /cameras/{id}/calibration — never fabricated, never inferred
+    # from image content. A 3x3 JSON matrix, not raw point pairs: the
+    # points themselves aren't needed at inference time, only the fitted
+    # transform.
+    homography_json = Column(String, nullable=True)
+    homography_calibrated_at = Column(DateTime, nullable=True)
+    # Free text describing how/against what reference the survey points
+    # were measured (e.g. "IRC 086:2018 3.5m lane width, 4-point manual
+    # survey 2026-09-18") — shown to investigators alongside speed_kmh so a
+    # calibrated speed is never presented without its provenance.
+    homography_reference_note = Column(String, nullable=True)
+
     # Model 2's "unified viewer connecting >=2 different systems" —
     # NULL means this row is a real Gujarat sandbox camera; a non-null
     # value (e.g. "caltrans_d3_public_api") marks it as onboarded from a
@@ -201,6 +218,15 @@ class VehicleEvent(Base):
     dwell_time_s = Column(Float, nullable=True)  # how long the vehicle was tracked in this camera's view
     speed_px_per_s = Column(Float, nullable=True)  # bbox-centre displacement / elapsed PTS
     direction_deg = Column(Float, nullable=True)  # 0=right, 90=down, 180=left, 270=up (image coords)
+    # Real-world speed (analytics/calibration.py), NOT derived from
+    # speed_px_per_s by a unit conversion — recomputed from the same bbox
+    # centres through the camera's homography. NULL for every event unless
+    # CameraRegistry.homography_json was already set for this camera_id at
+    # finalize time (most events, for the foreseeable pilot — most cameras
+    # are never surveyed). Never backfilled retroactively if a camera gets
+    # calibrated later, matching this project's append-only evidence stance
+    # (CLAUDE.md 24.4): a later calibration only affects events after it.
+    speed_kmh = Column(Float, nullable=True)
 
     # How THIS sighting got attached to its identity_id — the raw material
     # for the "why was this vehicle linked?" explainability panel. Captured

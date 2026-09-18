@@ -6,7 +6,7 @@ import io
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from .. import config
 from ..analytics.anpr_suitability import anpr_suitability_by_camera
+from ..analytics.calibration import MIN_CALIBRATION_POINTS, CalibrationPoint, compute_homography_json
 from ..catalogue import catalogue
 from ..db.models import CameraAuditLog, CameraRegistry, VehicleEvent
 from .auth import Principal, department_scope, require_role
@@ -113,6 +114,17 @@ def _merged_camera_view(
         "expected_direction_deg": registry.expected_direction_deg if registry else None,
         "install_date": registry.install_date.isoformat() if registry and registry.install_date else None,
         "coverage_radius_m": registry.coverage_radius_m if registry else None,
+        # Whether VehicleEvent.speed_kmh is real for this camera's future
+        # sightings (analytics/calibration.py) — never the matrix itself,
+        # which is internal-only inference input, not investigator-facing
+        # data.
+        "homography_calibrated": bool(registry.homography_json) if registry else False,
+        "homography_calibrated_at": (
+            registry.homography_calibrated_at.isoformat()
+            if registry and registry.homography_calibrated_at
+            else None
+        ),
+        "homography_reference_note": registry.homography_reference_note if registry else None,
         "onboarded": registry is not None,
         "anpr_suitability": anpr_suitability,
         # Model 2's "unified viewer connecting >=2 different systems": null
@@ -476,6 +488,64 @@ def set_maintenance_status(
         "under_maintenance": registry.under_maintenance,
         "maintenance_reason": registry.maintenance_reason,
         "maintenance_until": registry.maintenance_until.isoformat() if registry.maintenance_until else None,
+    }
+
+
+class CalibrationPointIn(BaseModel):
+    image_x: float
+    image_y: float
+    world_x: float  # metres, arbitrary local ground-plane origin (e.g. a surveyed lane edge)
+    world_y: float
+
+
+class CalibrationSubmit(BaseModel):
+    points: list[CalibrationPointIn] = Field(min_length=MIN_CALIBRATION_POINTS)
+    # Required, not optional: a stored calibration with no stated provenance
+    # is indistinguishable from a fabricated one to a later investigator —
+    # see homography_reference_note's docstring on db/models.py.
+    reference_note: str = Field(min_length=1)
+
+
+@router.post("/{camera_id}/calibration")
+def set_camera_calibration(
+    camera_id: str,
+    body: CalibrationSubmit,
+    db: Session = Depends(get_db),
+    admin: Principal = Depends(require_role("admin")),
+):
+    """Model 2's homography-calibration deliverable: turns a real physical
+    survey (>=4 image-pixel <-> ground-metre point pairs) into the stored
+    matrix that VehicleEvent.speed_kmh is computed from going forward (see
+    analytics/calibration.py, analytics/pipeline.py). Admin-only, same
+    reasoning as maintenance-status above — this is a deliberate human
+    attestation that a camera was actually surveyed, never something the
+    system should infer or guess at.
+
+    Does not touch existing VehicleEvent rows: calibrating a camera only
+    affects sightings finalized AFTER this call, matching the append-only
+    evidence stance elsewhere in this project (an event's speed_kmh is
+    frozen at the confidence level the system actually had when it was
+    written, not silently upgraded later)."""
+    registry = db.get(CameraRegistry, camera_id)
+    if registry is None:
+        raise HTTPException(status_code=404, detail=f"camera {camera_id} is not registered — onboard it first")
+
+    points = [CalibrationPoint(p.image_x, p.image_y, p.world_x, p.world_y) for p in body.points]
+    try:
+        homography_json = compute_homography_json(points)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    registry.homography_json = homography_json
+    registry.homography_calibrated_at = dt.datetime.utcnow()
+    registry.homography_reference_note = body.reference_note
+    db.add(CameraAuditLog(camera_id=camera_id, user_id=admin.user_id, action="calibration_set"))
+    db.commit()
+    return {
+        "id": camera_id,
+        "homography_calibrated": True,
+        "homography_calibrated_at": registry.homography_calibrated_at.isoformat(),
+        "homography_reference_note": registry.homography_reference_note,
     }
 
 

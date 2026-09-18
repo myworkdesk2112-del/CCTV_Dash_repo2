@@ -38,6 +38,7 @@ from ..db.session import SessionLocal
 from ..streaming.rtsp_client import Frame
 from ..watchlist.service import watchlist_service
 from .anomaly import raise_anomaly_alerts
+from .calibration import calibrated_speed_kmh
 from . import evidence_class as evclass
 from .anpr import PlateReader
 from .attributes import MakeModelClassifier, StubMakeModelClassifier, extract_attributes
@@ -172,6 +173,20 @@ class AnalyticsPipeline:
         session = SessionLocal()
         try:
             self._ensure_camera_registered(session, camera_id)
+            # SessionLocal is autoflush=False (db/session.py), so a
+            # just-added-but-not-yet-flushed CameraRegistry row (brand new
+            # camera's first batch) would NOT be found by session.get()
+            # below — pending objects only join the identity map on flush,
+            # unlike already-persistent ones. flush() (not commit — no
+            # need to end the transaction yet) makes it visible without
+            # waiting for the loop's own per-track commits.
+            session.flush()
+            # Fetched once per batch (same camera_id for every track here),
+            # not per-track and not re-fetched again below for anomaly
+            # detection — an N+1 that was harmless at pilot scale but no
+            # reason to repeat, same reasoning as _merged_camera_view's own
+            # batch-fetch fix in routes_cameras.py.
+            camera_row = session.get(CameraRegistry, camera_id)
 
             for track in tracks:
                 plate, plate_confidence = track.consensus_plate()
@@ -194,6 +209,12 @@ class AnalyticsPipeline:
 
                 attrs = track.best_attrs
                 dwell_time_s, speed_px_per_s, direction_deg = track.motion_attributes()
+                speed_kmh = calibrated_speed_kmh(
+                    camera_row.homography_json if camera_row else None,
+                    track.first_bbox,
+                    track.bbox,
+                    track.last_pts_ms - track.first_pts_ms,
+                )
                 embedding = (
                     self._reid_encoder.encode(track.best_crop)
                     if track.best_crop is not None
@@ -250,6 +271,7 @@ class AnalyticsPipeline:
                     dwell_time_s=dwell_time_s,
                     speed_px_per_s=speed_px_per_s,
                     direction_deg=direction_deg,
+                    speed_kmh=speed_kmh,
                     bbox_x1=track.bbox[0], bbox_y1=track.bbox[1],
                     bbox_x2=track.bbox[2], bbox_y2=track.bbox[3],
                 )
@@ -278,7 +300,6 @@ class AnalyticsPipeline:
                         evidence_class_reason=evclass.describe(sighting_class, event.link_method),
                     )
 
-                camera_row = session.get(CameraRegistry, camera_id)
                 raise_anomaly_alerts(session, camera_row, event, identity)
         finally:
             session.close()

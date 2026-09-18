@@ -78,6 +78,10 @@ _ADDITIVE_MIGRATIONS = [
     ("camera_registry", "under_maintenance", "BOOLEAN DEFAULT FALSE NOT NULL"),
     ("camera_registry", "maintenance_reason", "VARCHAR"),
     ("camera_registry", "maintenance_until", "TIMESTAMP"),
+    ("camera_registry", "homography_json", "VARCHAR"),
+    ("camera_registry", "homography_calibrated_at", "TIMESTAMP"),
+    ("camera_registry", "homography_reference_note", "VARCHAR"),
+    ("vehicle_event", "speed_kmh", "FLOAT"),
 ]
 
 
