@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" font-family="Arial, sans-serif">
+<rect width="1440" height="900" fill="#ffffff"/>
+<rect x="0" y="0" width="220" height="900" rx="0" fill="#f4f5f7" stroke="#ddd" stroke-width="1"/>
+<text x="16" y="28" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#111" text-anchor="start">SENTINEL</text>
+<text x="16" y="42" font-family="Arial, sans-serif" font-size="9" font-weight="400" fill="#888" text-anchor="start">Gujarat Police</text>
+<line x1="0" y1="54" x2="220" y2="54" stroke="#ddd" stroke-width="1"/>
+<text x="16" y="72" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">OPERATIONS</text>
+<text x="16" y="88" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Command Centre</text>
+<text x="16" y="108" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">State Map</text>
+<text x="16" y="128" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Live Network</text>
+<text x="16" y="152" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">INVESTIGATIONS</text>
+<text x="16" y="168" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Vehicle Search</text>
+<rect x="6" y="175" width="208" height="18" rx="4" fill="#dbe4ff" stroke="#3b5bdb" stroke-width="1.3"/>
+<text x="16" y="188" font-family="Arial, sans-serif" font-size="10.3" font-weight="700" fill="#111" text-anchor="start">Observation Trail</text>
+<rect x="168" y="178" width="38" height="13" rx="6" fill="none" stroke="#3b5bdb" stroke-width="1"/>
+<text x="187" y="187" font-family="Arial, sans-serif" font-size="6.5" font-weight="700" fill="#3b5bdb" text-anchor="middle">CORE</text>
+<text x="16" y="208" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Watchlist &amp; Alerts</text>
+<text x="16" y="228" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Investigation Cases</text>
+<rect x="168" y="218" width="38" height="13" rx="6" fill="none" stroke="#b45309" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="187" y="227" font-family="Arial, sans-serif" font-size="6.5" font-weight="700" fill="#b45309" text-anchor="middle">SOON</text>
+<text x="16" y="252" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">CAMERA INTELLIGENCE</text>
+<text x="16" y="268" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Camera Registry</text>
+<text x="16" y="288" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Camera Health</text>
+<text x="16" y="308" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Coverage &amp; Gaps</text>
+<text x="16" y="328" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">ANPR Readiness</text>
+<rect x="168" y="318" width="38" height="13" rx="6" fill="none" stroke="#b45309" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="187" y="327" font-family="Arial, sans-serif" font-size="6.5" font-weight="700" fill="#b45309" text-anchor="middle">SOON</text>
+<text x="16" y="352" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">EVIDENCE</text>
+<text x="16" y="368" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Evidence Records</text>
+<text x="16" y="388" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Evidence Export</text>
+<rect x="168" y="378" width="38" height="13" rx="6" fill="none" stroke="#b45309" stroke-width="1" stroke-dasharray="2 2"/>
+<text x="187" y="387" font-family="Arial, sans-serif" font-size="6.5" font-weight="700" fill="#b45309" text-anchor="middle">SOON</text>
+<text x="16" y="412" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">INTEGRATIONS</text>
+<text x="16" y="428" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Connected Systems</text>
+<text x="16" y="448" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Integration Monitor</text>
+<text x="16" y="472" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">STATEWIDE OPERATIONS</text>
+<text x="16" y="488" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Statewide Overview</text>
+<text x="16" y="508" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Central Monitoring</text>
+<text x="16" y="528" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Infrastructure &amp; Scale</text>
+<text x="16" y="548" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Storage &amp; Retention</text>
+<text x="16" y="568" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Resilience &amp; DR</text>
+<text x="16" y="588" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Statewide Readiness</text>
+<text x="16" y="612" font-family="Arial, sans-serif" font-size="8.5" font-weight="700" fill="#999" text-anchor="start">SYSTEM</text>
+<text x="16" y="628" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Audit &amp; Governance</text>
+<text x="16" y="648" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">User Administration</text>
+<text x="16" y="668" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Reports</text>
+<text x="16" y="688" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Architecture</text>
+<text x="16" y="708" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Runtime Health</text>
+<text x="16" y="728" font-family="Arial, sans-serif" font-size="10.3" font-weight="400" fill="#444" text-anchor="start">Settings</text>
+<line x1="0" y1="830" x2="220" y2="830" stroke="#ddd" stroke-width="1"/>
+<text x="16" y="848" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#999" text-anchor="start">CAMERA ESTATE</text>
+<text x="16" y="864" font-family="Arial, sans-serif" font-size="9" font-weight="400" fill="#777" text-anchor="start">In catalogue / Onboarded</text>
+<text x="16" y="886" font-family="Arial, sans-serif" font-size="7.5" font-weight="400" fill="#aaa" text-anchor="start">Interoperability &amp; evidence layer</text>
+<rect x="220" y="0" width="1220" height="56" rx="0" fill="#ffffff" stroke="#ddd" stroke-width="1"/>
+<circle cx="244" cy="20" r="4" fill="#22c55e" stroke="none"/>
+<text x="254" y="24" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#111" text-anchor="start">SENTINEL</text>
+<text x="254" y="36" font-family="Arial, sans-serif" font-size="7.5" font-weight="400" fill="#999" text-anchor="start">Gujarat Police · Geo-Temporal Vehicle Intelligence</text>
+<rect x="520" y="14" width="120" height="28" rx="6" fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+<circle cx="532" cy="28" r="3" fill="#22c55e" stroke="none"/>
+<text x="542" y="32" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#555" text-anchor="start">System NOMINAL</text>
+<rect x="652" y="14" width="120" height="28" rx="6" fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+<circle cx="664" cy="28" r="3" fill="#22c55e" stroke="none"/>
+<text x="674" y="32" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#555" text-anchor="start">Cameras N · active</text>
+<rect x="784" y="14" width="120" height="28" rx="6" fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+<circle cx="796" cy="28" r="3" fill="#d1d5db" stroke="none"/>
+<text x="806" y="32" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#555" text-anchor="start">Alerts N</text>
+<rect x="970" y="14" width="220" height="28" rx="6" fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+<text x="980" y="32" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#999" text-anchor="start">Search vehicle / plate / case ID</text>
+<circle cx="1220" cy="28" r="9" fill="none" stroke="#999"/>
+<text x="1220" y="31" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#999" text-anchor="middle">⬚</text>
+<rect x="1245" y="12" width="150" height="32" rx="16" fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+<circle cx="1262" cy="28" r="9" fill="#dbe4ff" stroke="#3b5bdb"/>
+<text x="1262" y="31" font-family="Arial, sans-serif" font-size="7" font-weight="700" fill="#3b5bdb" text-anchor="middle">AB</text>
+<text x="1280" y="25" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#333" text-anchor="start">user_id</text>
+<text x="1280" y="35" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#999" text-anchor="start">role</text>
+<text x="240" y="95" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#111" text-anchor="start">Geo-Temporal Graph  [Core engine]</text>
+<text x="240" y="113" font-family="Arial, sans-serif" font-size="10.5" font-weight="400" fill="#777" text-anchor="start">Real physics-based feasibility over the actual onboarded camera registry — not a learned prediction.</text>
+<line x1="240" y1="129" x2="1416" y2="129" stroke="#eee" stroke-width="1"/>
+<rect x="240" y="145" width="1176" height="90" rx="4" fill="#ffffff" stroke="#ddd" stroke-width="1.2"/>
+<text x="254" y="167" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#222" text-anchor="start">Run the search</text>
+<line x1="254" y1="175" x2="1402" y2="175" stroke="#eee" stroke-width="1"/>
+<rect x="254" y="193" width="240" height="24" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="262" y="209" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#888" text-anchor="start">Plate</text>
+<rect x="514" y="193" width="240" height="24" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="522" y="209" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#888" text-anchor="start">Purpose</text>
+<rect x="774" y="193" width="240" height="24" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="782" y="209" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#888" text-anchor="start">Case ID (optional)</text>
+<rect x="1034" y="193" width="240" height="24" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="1042" y="209" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#888" text-anchor="start">[Find candidate cameras]</text>
+<rect x="240" y="251" width="1176" height="90" rx="4" fill="#ffffff" stroke="#ddd" stroke-width="1.2"/>
+<text x="254" y="273" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#222" text-anchor="start">Resolution pipeline — this run</text>
+<line x1="254" y1="281" x2="1402" y2="281" stroke="#eee" stroke-width="1"/>
+<rect x="254.0" y="299" width="221.6" height="46" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="260.0" y="317" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#333" text-anchor="start">01 Last observation</text>
+<text x="260.0" y="333" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#888" text-anchor="start">real value from this run</text>
+<rect x="483.6" y="299" width="221.6" height="46" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="489.6" y="317" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#333" text-anchor="start">02 Graph search</text>
+<text x="489.6" y="333" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#888" text-anchor="start">real value from this run</text>
+<rect x="713.2" y="299" width="221.6" height="46" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="719.2" y="317" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#333" text-anchor="start">03 Feasibility filter</text>
+<text x="719.2" y="333" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#888" text-anchor="start">real value from this run</text>
+<rect x="942.8" y="299" width="221.6" height="46" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="948.8" y="317" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#333" text-anchor="start">04 Candidates</text>
+<text x="948.8" y="333" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#888" text-anchor="start">real value from this run</text>
+<rect x="1172.4" y="299" width="221.6" height="46" rx="4" fill="#fafafa" stroke="#ccc" stroke-width="1.2"/>
+<text x="1178.4" y="317" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#333" text-anchor="start">05 Next step</text>
+<text x="1178.4" y="333" font-family="Arial, sans-serif" font-size="7" font-weight="400" fill="#888" text-anchor="start">real value from this run</text>
+<rect x="240" y="357" width="520" height="380" rx="4" fill="#ffffff" stroke="#ddd" stroke-width="1.2"/>
+<text x="254" y="379" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#222" text-anchor="start">Map</text>
+<line x1="254" y1="387" x2="746" y2="387" stroke="#eee" stroke-width="1"/>
+<rect x="254" y="405" width="492" height="330" rx="4" fill="#eef2f7" stroke="#ccd" stroke-width="1.2" stroke-dasharray="3 3"/>
+<text x="500.0" y="570" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#98a" text-anchor="middle">last observation (green) + feasible candidates (blue, dashed)</text>
+<rect x="780" y="357" width="300" height="380" rx="4" fill="#ffffff" stroke="#ddd" stroke-width="1.2"/>
+<text x="794" y="379" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#222" text-anchor="start">Last observation</text>
+<line x1="794" y1="387" x2="1066" y2="387" stroke="#eee" stroke-width="1"/>
+<text x="794" y="409" font-family="Arial, sans-serif" font-size="13" font-weight="700" fill="#222" text-anchor="start">camera_id</text>
+<text x="794" y="425" font-family="Arial, sans-serif" font-size="9" font-weight="400" fill="#888" text-anchor="start">location</text>
+<rect x="1100" y="357" width="320" height="380" rx="4" fill="#ffffff" stroke="#ddd" stroke-width="1.2"/>
+<text x="1114" y="379" font-family="Arial, sans-serif" font-size="12" font-weight="700" fill="#222" text-anchor="start">Candidate cameras</text>
+<line x1="1114" y1="387" x2="1406" y2="387" stroke="#eee" stroke-width="1"/>
+<rect x="1114" y="405" width="292" height="20" rx="4" fill="#fafafa" stroke="#eee" stroke-width="1.2"/>
+<text x="1120" y="419" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#333" text-anchor="start">cam01  N km · ≥N km/h</text>
+<rect x="1344" y="408" width="62" height="14" rx="4" fill="none" stroke="#15803d" stroke-width="1"/>
+<text x="1375" y="418" font-family="Arial, sans-serif" font-size="6.5" font-weight="400" fill="#15803d" text-anchor="middle">FEASIBLE</text>
+<rect x="1114" y="431" width="292" height="20" rx="4" fill="#fafafa" stroke="#eee" stroke-width="1.2"/>
+<text x="1120" y="445" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#333" text-anchor="start">cam02  N km · ≥N km/h</text>
+<rect x="1344" y="434" width="62" height="14" rx="4" fill="none" stroke="#15803d" stroke-width="1"/>
+<text x="1375" y="444" font-family="Arial, sans-serif" font-size="6.5" font-weight="400" fill="#15803d" text-anchor="middle">FEASIBLE</text>
+<rect x="1114" y="457" width="292" height="20" rx="4" fill="#fafafa" stroke="#eee" stroke-width="1.2"/>
+<text x="1120" y="471" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#333" text-anchor="start">cam03  N km · ≥N km/h</text>
+<rect x="1344" y="460" width="62" height="14" rx="4" fill="none" stroke="#15803d" stroke-width="1"/>
+<text x="1375" y="470" font-family="Arial, sans-serif" font-size="6.5" font-weight="400" fill="#15803d" text-anchor="middle">FEASIBLE</text>
+<rect x="1114" y="483" width="292" height="20" rx="4" fill="#fafafa" stroke="#eee" stroke-width="1.2"/>
+<text x="1120" y="497" font-family="Arial, sans-serif" font-size="8.5" font-weight="400" fill="#333" text-anchor="start">cam04  N km · ≥N km/h</text>
+<rect x="1344" y="486" width="62" height="14" rx="4" fill="none" stroke="#15803d" stroke-width="1"/>
+<text x="1375" y="496" font-family="Arial, sans-serif" font-size="6.5" font-weight="400" fill="#15803d" text-anchor="middle">FEASIBLE</text>
+<text x="1114" y="525" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#999" text-anchor="start">ELIMINATED (N)</text>
+<rect x="1114" y="541" width="292" height="18" rx="4" fill="#fff5f5" stroke="#eee" stroke-width="1.2"/>
+<text x="1120" y="554" font-family="Arial, sans-serif" font-size="8" font-weight="400" fill="#999" text-anchor="start">cam0N  ≥N km/h required</text>
+<rect x="1114" y="565" width="292" height="18" rx="4" fill="#fff5f5" stroke="#eee" stroke-width="1.2"/>
+<text x="1120" y="578" font-family="Arial, sans-serif" font-size="8" font-weight="400" fill="#999" text-anchor="start">cam0N  ≥N km/h required</text>
+</svg>
