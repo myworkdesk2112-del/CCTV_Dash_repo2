@@ -1,0 +1,19 @@
+# DESIGN TARGET — untested. See infra/README.md.
+# Non-secret config only — real credentials go in secret.example.yaml's
+# real counterpart (a real Secret object, or better, an external
+# secrets manager per PRODUCTION_MIGRATION_PLAN.md Phase 7 — this
+# ConfigMap is not where SENTINEL_ACCESS_TOKEN/ONVIF creds belong).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-backend-config
+  namespace: sentinel
+data:
+  SENTINEL_CORS_ALLOWED_ORIGINS: "https://sentinel.example.gov.in"
+  ANALYTICS_FRAME_STRIDE: "5"
+  SENTINEL_RETENTION_DAYS: "30"
+  SENTINEL_AUDIT_RETENTION_DAYS: "365"
+  SENTINEL_RATE_LIMIT_PER_MINUTE: "600"
+  SENTINEL_VECTOR_SEARCH_ENABLED: "false"
+  SENTINEL_FEDERATION_BUS_BACKEND: "polled"
+  SENTINEL_SSO_OIDC_ENABLED: "false"

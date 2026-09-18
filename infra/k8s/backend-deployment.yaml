@@ -1,0 +1,92 @@
+# DESIGN TARGET — untested. See infra/README.md.
+#
+# Stateless API tier per SCALABILITY.md §5 ("API tier: stateless
+# FastAPI instances behind a load balancer; horizontal scaling is
+# adding instances, no code change required"). NOTE: this manifest
+# assumes the Phase 5 split (stream workers as their own
+# deployment/process, not sharing this pod) has ALREADY happened — it
+# has not, per PRODUCTION_MIGRATION_PLAN.md Phase 5. Running the
+# pilot's actual `python -m app.main` entrypoint (which also starts
+# in-process RTSP StreamManager threads) behind more than one replica
+# would have every replica trying to open every camera's RTSP
+# connection redundantly — do not scale replicas past 1 until Phase 5's
+# worker-process split is actually built. Left at replicas: 1 here for
+# that reason, not as an oversight.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-backend
+  namespace: sentinel
+spec:
+  replicas: 1  # see the note above — do not raise until Phase 5 ships
+  selector:
+    matchLabels:
+      app: sentinel-backend
+  template:
+    metadata:
+      labels:
+        app: sentinel-backend
+    spec:
+      containers:
+        - name: backend
+          image: sentinel/backend:REPLACE_ME  # built from infra/docker/Dockerfile.backend
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: sentinel-backend-config
+            - secretRef:
+                name: sentinel-backend-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: crops
+              mountPath: /app/data/crops
+            - name: weights
+              mountPath: /app/weights
+      volumes:
+        - name: crops
+          persistentVolumeClaim:
+            claimName: sentinel-crops-pvc
+        - name: weights
+          persistentVolumeClaim:
+            claimName: sentinel-weights-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sentinel-crops-pvc
+  namespace: sentinel
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sentinel-weights-pvc
+  namespace: sentinel
+spec:
+  accessModes: ["ReadOnlyMany"]
+  resources:
+    requests:
+      storage: 5Gi

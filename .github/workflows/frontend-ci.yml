@@ -1,0 +1,30 @@
+# DESIGN TARGET — never run in this environment. YAML syntax validated
+# with PyYAML; the job steps themselves are unexecuted. See
+# sentinel-solution/docs/PRODUCTION_MIGRATION_PLAN.md Phase 3.
+name: frontend-ci
+
+on:
+  pull_request:
+    paths:
+      - "sentinel-solution/frontend/**"
+  push:
+    branches: [master]
+    paths:
+      - "sentinel-solution/frontend/**"
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-solution/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - name: Lint (oxlint)
+        run: npm run lint
+      - name: Build
+        run: npm run build

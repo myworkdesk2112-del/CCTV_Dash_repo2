@@ -1,0 +1,13 @@
+# DESIGN TARGET — untested. See infra/README.md.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-backend
+  namespace: sentinel
+spec:
+  selector:
+    app: sentinel-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP

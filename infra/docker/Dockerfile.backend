@@ -1,0 +1,48 @@
+# DESIGN TARGET — never built/run in this environment (no Docker
+# available). See infra/README.md before trusting this.
+#
+# Sentinel backend — FastAPI + SQLAlchemy, per
+# sentinel-solution/docs/PRODUCTION_MIGRATION_PLAN.md Phase 2.
+
+FROM python:3.11-slim AS base
+
+# opencv-python needs these system libs even in headless environments;
+# libgl1 for OpenCV's video decode path.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY sentinel-solution/backend/requirements.txt requirements.txt
+COPY sentinel-solution/backend/requirements-ml.txt requirements-ml.txt
+COPY sentinel-solution/backend/requirements-production.txt requirements-production.txt
+
+# ML deps are optional (main.py falls back to honest stubs if absent —
+# see CLAUDE.md §15.1) but a real deployment doing analytics needs them;
+# --no-cache-dir keeps the image smaller, matters at ~1-2GB for the ML
+# stack.
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir -r requirements-ml.txt || true
+
+COPY sentinel-solution/backend/app app
+
+# Real plate-localizer weights are fetched separately (see config.py's
+# PLATE_DETECTOR_WEIGHTS comment) — not baked into the image, since
+# they're a few hundred MB and change independently of app code. Mount
+# or download at deploy time.
+RUN mkdir -p /app/weights /app/data/crops
+
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8000
+
+# NOT the pilot's `python -m app.main` entrypoint (that starts the
+# in-process StreamManager/analytics threads AND the API server in one
+# process — fine for a single-node pilot, a real deployment separates
+# the stateless API tier from stream-worker processes per
+# PRODUCTION_MIGRATION_PLAN.md Phase 5). Left as the same single-process
+# entrypoint here since Phase 5's per-camera-worker-process split isn't
+# built — do not present this Dockerfile as having that separation.
+CMD ["python", "-m", "app.main"]

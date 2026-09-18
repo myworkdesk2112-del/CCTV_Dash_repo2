@@ -217,3 +217,37 @@ ONVIF_PROBE_TIMEOUT_S = float(os.environ.get("SENTINEL_ONVIF_PROBE_TIMEOUT_S", "
 DEMO_CAMERA_SCOPE = {
     c.strip() for c in os.environ.get("SENTINEL_DEMO_CAMERA_SCOPE", "").split(",") if c.strip()
 } or None
+
+# --- Production-hardening scaffolds (2026-09-18) ---
+# Everything below is IMPLEMENTED, UNVERIFIED per
+# docs/PRODUCTION_MIGRATION_PLAN.md / docs/PRODUCTION_READINESS.md — no
+# real Kafka broker, pgvector instance, or OIDC provider exists in this
+# environment. All default OFF; the pilot's runtime behavior is
+# unchanged unless a deployer explicitly opts in to each one.
+
+# analytics/vector_search.py — pgvector ANN candidate search, an
+# alternative to identity.py's brute-force cosine loop for the
+# statewide-scale Re-ID problem SCALABILITY.md §2 names. Requires
+# DATABASE_URL to be postgresql:// AND `CREATE EXTENSION vector` already
+# run — vector_search.is_available() checks both at call time, this flag
+# alone does not turn anything on.
+VECTOR_SEARCH_ENABLED = os.environ.get("SENTINEL_VECTOR_SEARCH_ENABLED", "false").lower() == "true"
+
+# analytics/kafka_bus.py — Kafka-backed alternative to Model 3's polled
+# FederatedEvent table, for the "Regional rollout" phase in
+# SCALABILITY.md §6. Not wired into main.py's default ingest loop.
+FEDERATION_BUS_BACKEND = os.environ.get("SENTINEL_FEDERATION_BUS_BACKEND", "polled")  # "polled" | "kafka"
+KAFKA_BOOTSTRAP_SERVERS = os.environ.get("SENTINEL_KAFKA_BOOTSTRAP_SERVERS", "")
+KAFKA_FEDERATION_TOPIC = os.environ.get("SENTINEL_KAFKA_FEDERATION_TOPIC", "sentinel.federation.events")
+KAFKA_FEDERATION_CONSUMER_GROUP = os.environ.get("SENTINEL_KAFKA_FEDERATION_CONSUMER_GROUP", "sentinel-federation")
+
+# api/sso_oidc.py — OIDC identity-federation, additive to auth.py's
+# existing API-key model (PRODUCTION_MIGRATION_PLAN.md Phase 4). No
+# route uses get_principal_oidc by default even when this is true; a
+# route must explicitly depend on it.
+SSO_OIDC_ENABLED = os.environ.get("SENTINEL_SSO_OIDC_ENABLED", "false").lower() == "true"
+SSO_OIDC_ISSUER = os.environ.get("SENTINEL_SSO_OIDC_ISSUER", "")
+SSO_OIDC_AUDIENCE = os.environ.get("SENTINEL_SSO_OIDC_AUDIENCE", "")
+SSO_OIDC_JWKS_URL = os.environ.get("SENTINEL_SSO_OIDC_JWKS_URL", "")
+SSO_OIDC_ROLE_CLAIM = os.environ.get("SENTINEL_SSO_OIDC_ROLE_CLAIM", "roles")
+SSO_OIDC_DEPARTMENT_CLAIM = os.environ.get("SENTINEL_SSO_OIDC_DEPARTMENT_CLAIM", "department")

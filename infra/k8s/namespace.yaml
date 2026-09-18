@@ -1,0 +1,6 @@
+# DESIGN TARGET — untested (no kubectl/cluster in this environment).
+# See infra/README.md.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel

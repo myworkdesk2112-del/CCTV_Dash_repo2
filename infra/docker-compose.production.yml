@@ -1,0 +1,77 @@
+# DESIGN TARGET — untested (no Docker in this environment). See
+# infra/README.md. A local production-like stack per
+# PRODUCTION_MIGRATION_PLAN.md Phase 2 — NOT the pilot's actual
+# development setup (that's `python -m app.main` + `npm run dev`,
+# unchanged, see sentinel-solution's own README).
+#
+# Real risk flagged by the migration plan and NOT resolved here:
+# RTSP (port 8554) and ONVIF WS-Discovery (UDP multicast) do not cross
+# a default Docker bridge network cleanly. `network_mode: host` below
+# is the simplest fix (Linux-only) — untested against a real camera.
+
+version: "3.9"
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: ${SENTINEL_DB_PASSWORD:?set SENTINEL_DB_PASSWORD}
+    volumes:
+      - sentinel_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Not exposed to the host by default — only the backend service
+    # reaches it, over the compose-internal network.
+
+  backend:
+    build:
+      context: ../
+      dockerfile: infra/docker/Dockerfile.backend
+    network_mode: host  # see the RTSP/ONVIF note above; Linux-only
+    environment:
+      DATABASE_URL: postgresql://sentinel:${SENTINEL_DB_PASSWORD:?set SENTINEL_DB_PASSWORD}@localhost:5432/sentinel
+      SENTINEL_CORS_ALLOWED_ORIGINS: ${SENTINEL_CORS_ALLOWED_ORIGINS:-https://sentinel.example.gov.in}
+      # Everything else (CDN host, stream host, access token/email,
+      # feature flags) comes from an env file at deploy time — never
+      # bake real credentials into this compose file or an image layer.
+    env_file:
+      - .env.production  # not committed; see .env.production.example
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - sentinel_crops:/app/data/crops
+      - sentinel_weights:/app/weights
+
+  frontend:
+    build:
+      context: ../
+      dockerfile: infra/docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: ${SENTINEL_PUBLIC_API_URL:-https://sentinel.example.gov.in}
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+
+volumes:
+  sentinel_postgres_data:
+  sentinel_crops:
+  sentinel_weights:
+
+# NOTE on Kafka (Model 3's Regional-rollout event bus,
+# analytics/kafka_bus.py, SENTINEL_FEDERATION_BUS_BACKEND=kafka): no
+# Kafka service is defined above. A real addition would add a
+# single-broker `bitnami/kafka` (or Redpanda) service under a
+# `profiles: ["kafka"]` block. Deliberately not written out here — no
+# broker exists in this environment to validate the resulting compose
+# file against, and a wrong Kafka compose config is worse than an
+# honestly absent one. See kafka_bus.py's own docstring.

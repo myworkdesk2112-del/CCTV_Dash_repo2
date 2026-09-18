@@ -1,0 +1,28 @@
+# DESIGN TARGET — untested. See infra/README.md.
+#
+# IMPORTANT CAVEAT, same as backend-deployment.yaml's note: this HPA is
+# only safe to enable AFTER PRODUCTION_MIGRATION_PLAN.md Phase 5 (moving
+# per-camera RTSP workers out of the API process) actually ships.
+# Autoscaling the current single-process pilot code would multiply
+# redundant RTSP connections per replica, not add real capacity.
+# minReplicas is pinned at 1 for that reason — do not raise without
+# Phase 5 done.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sentinel-backend-hpa
+  namespace: sentinel
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sentinel-backend
+  minReplicas: 1
+  maxReplicas: 1  # raise only after Phase 5 ships — see note above
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

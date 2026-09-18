@@ -1,0 +1,20 @@
+# Optional dependencies for the production-hardening scaffolds added
+# 2026-09-18 (analytics/vector_search.py, analytics/kafka_bus.py,
+# api/sso_oidc.py). Deliberately NOT merged into requirements.txt —
+# installing these is a deployment decision for a real Postgres+
+# pgvector/Kafka/OIDC environment, not something the pilot needs.
+# See docs/PRODUCTION_READINESS.md.
+
+# analytics/kafka_bus.py — Kafka producer/consumer for Model 3's event
+# bus at regional/statewide scale (SCALABILITY.md §6 phase 3).
+kafka-python==2.0.2
+
+# api/sso_oidc.py — OIDC ID-token verification (JWKS fetch + RS256
+# signature/issuer/audience validation).
+python-jose[cryptography]==3.3.0
+
+# analytics/vector_search.py needs no extra package beyond the
+# psycopg2-binary already in requirements.txt — pgvector's SQL
+# extension is installed server-side (CREATE EXTENSION vector), not as
+# a Python package. pgvector-python is only needed if a future session
+# wants ORM-level vector column typing instead of this module's raw SQL.

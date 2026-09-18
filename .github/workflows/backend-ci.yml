@@ -1,0 +1,36 @@
+# DESIGN TARGET — never run in this environment (no GitHub Actions
+# runner available to trigger locally). YAML syntax validated with
+# PyYAML; the job steps themselves are unexecuted. See
+# sentinel-solution/docs/PRODUCTION_MIGRATION_PLAN.md Phase 3.
+#
+# Deliberately does NOT install requirements-ml.txt or run ML-dependent
+# tests — CLAUDE.md notes a real ML validation job needs to be separate
+# and slower (CPU-only is acceptable but shouldn't block every PR). This
+# workflow covers exactly what this session verified manually: the
+# self-contained pytest suite with no camera/ML deps.
+name: backend-ci
+
+on:
+  pull_request:
+    paths:
+      - "sentinel-solution/backend/**"
+  push:
+    branches: [master]
+    paths:
+      - "sentinel-solution/backend/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sentinel-solution/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: pip install -r requirements.txt
+      - name: Run backend test suite
+        run: python -m pytest tests -v

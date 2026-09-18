@@ -1,0 +1,22 @@
+# DESIGN TARGET — never built/run in this environment (no Docker
+# available). See infra/README.md before trusting this.
+#
+# Sentinel frontend — React 19 + Vite static build, served by nginx
+# instead of Vite's dev server (PRODUCTION_MIGRATION_PLAN.md Phase 2).
+
+FROM node:20-slim AS build
+WORKDIR /app
+COPY sentinel-solution/frontend/package*.json ./
+RUN npm ci
+COPY sentinel-solution/frontend .
+# VITE_API_BASE_URL is read at build time by Vite (see frontend/src/api.js)
+# — a real deployment must pass the backend's actual public URL here,
+# not localhost:8000.
+ARG VITE_API_BASE_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY infra/nginx/nginx.conf.example /etc/nginx/conf.d/default.conf
+EXPOSE 80 443

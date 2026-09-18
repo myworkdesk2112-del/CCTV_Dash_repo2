@@ -1,0 +1,65 @@
+# DESIGN TARGET — untested. See infra/README.md.
+#
+# A self-managed single-node Postgres for a district-pilot deployment
+# (PRODUCTION_MIGRATION_PLAN.md Phase 1 / SCALABILITY.md §6 phase 2).
+# At regional/statewide scale, SCALABILITY.md §5 calls for a real
+# "PostgreSQL primary/replica with automated failover" — a bare
+# StatefulSet like this has NO failover; use a managed Postgres service
+# or an operator (e.g. Zalando's postgres-operator, CloudNativePG)
+# instead once past the district-pilot phase. Written here only as the
+# simplest thing that satisfies Phase 1, not the recommended
+# regional/statewide answer.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sentinel-postgres
+  namespace: sentinel
+spec:
+  serviceName: sentinel-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinel-postgres
+  template:
+    metadata:
+      labels:
+        app: sentinel-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgis/postgis:16-3.4
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: sentinel
+            - name: POSTGRES_USER
+              value: sentinel
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinel-backend-secrets
+                  key: SENTINEL_DB_PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 100Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-postgres
+  namespace: sentinel
+spec:
+  clusterIP: None
+  selector:
+    app: sentinel-postgres
+  ports:
+    - port: 5432

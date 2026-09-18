@@ -1,0 +1,54 @@
+# DESIGN TARGET — untested. Replace certificate paths and
+# server_name before use; this is a template, not a ready config.
+#
+# TLS-terminating reverse proxy per PRODUCTION_MIGRATION_PLAN.md Phase 7
+# ("TLS for every network hop"). Serves the frontend static build and
+# proxies /api-shaped paths to the backend — Sentinel's actual routes
+# are flat/non-versioned (CLAUDE.md §13), so this proxies everything
+# under the backend's own route prefixes rather than a /api/ rewrite.
+
+server {
+    listen 80;
+    server_name _;
+    # Redirect all plain HTTP to HTTPS — never serve police
+    # investigative data unencrypted.
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name sentinel.example.gov.in;  # replace with the real deployment hostname
+
+    ssl_certificate     /etc/nginx/certs/fullchain.pem;
+    ssl_certificate_key /etc/nginx/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # Never let the browser cache a page that might contain
+    # investigative data across sessions on a shared machine.
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Backend routes are flat (cameras, vehicle, watchlist, alerts,
+    # federation, admin, health, auth, live, cases) — proxy each
+    # prefix explicitly rather than a blanket /api/ rewrite, matching
+    # this repo's non-versioned route convention (CLAUDE.md §13).
+    location ~ ^/(cameras|vehicle|watchlist|alerts|federation|admin|health|auth|live|cases)(/|$) {
+        proxy_pass http://backend:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # HLS segment streaming needs longer read timeouts than a
+        # typical JSON API call.
+        proxy_read_timeout 60s;
+    }
+}
