@@ -152,6 +152,21 @@ def hls_segment(
 # bounds a genuinely stuck upstream, same as the HLS proxy's default.
 _WHEP_TIMEOUT_S = 10
 
+# Matches the userinfo portion of a URL (scheme://user:pass@host/...).
+# `requests`/urllib3 exception messages don't consistently omit it — e.g.
+# `Response.raise_for_status()`'s HTTPError embeds `response.url` verbatim,
+# credentials and all, and other request-construction failures can too.
+# The HLS proxy above can safely log/return `exc` as-is because CDN URLs
+# never carry credentials (cookie-session auth); WHEP URLs DO
+# (email:password@, see catalogue.py), so every WHEP error path must
+# sanitize before it reaches a log line or an HTTP response body — never
+# assume a particular exception type is "safe" (CLAUDE.md 15.5).
+_URL_USERINFO_RE = re.compile(r"://[^/@\s]+@")
+
+
+def _sanitize_upstream_error(exc: Exception) -> str:
+    return _URL_USERINFO_RE.sub("://<redacted>@", str(exc))
+
 
 def _whep_host(whep_url: str) -> tuple[str | None, int | None]:
     parsed = urlparse(whep_url)
@@ -201,8 +216,9 @@ async def whep_offer(
             timeout=_WHEP_TIMEOUT_S,
         )
     except Exception as exc:  # noqa: BLE001 — surface as a clean 502, not a stack trace
-        logger.warning("WHEP offer failed for %s: %s", camera_id, exc)
-        raise HTTPException(502, f"upstream WHEP offer failed: {exc}") from None
+        safe_detail = _sanitize_upstream_error(exc)
+        logger.warning("WHEP offer failed for %s: %s", camera_id, safe_detail)
+        raise HTTPException(502, f"upstream WHEP offer failed: {safe_detail}") from None
 
     if resp.status_code not in (200, 201):
         raise HTTPException(502, f"upstream WHEP endpoint returned {resp.status_code}")
@@ -261,5 +277,7 @@ def whep_teardown(
         resp = requests.delete(with_stream_auth(u), timeout=_WHEP_TIMEOUT_S)
         return Response(status_code=resp.status_code)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("WHEP teardown failed for %s (%s): %s", camera_id, u, exc)
+        # `u` itself is already credential-free (see whep_offer's Location
+        # rewrite) — only `exc`'s own text needs sanitizing here.
+        logger.warning("WHEP teardown failed for %s (%s): %s", camera_id, u, _sanitize_upstream_error(exc))
         return Response(status_code=204)

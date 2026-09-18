@@ -81,6 +81,28 @@ def test_whep_offer_502s_on_upstream_failure(session):
     assert exc_info.value.status_code == 502
 
 
+def test_whep_offer_failure_never_leaks_credentials_to_the_client(session, caplog):
+    """The embedded email:password credential must never reach an HTTP
+    response body or a log line, even when the underlying exception's own
+    message happens to embed the full credentialed URL (confirmed real
+    behavior for e.g. requests' HTTPError — see routes_stream.py's
+    _sanitize_upstream_error docstring)."""
+    viewer = Principal("viewer1", "viewer", None)
+    cam = _fake_camera()
+
+    with patch("app.api.routes_stream.catalogue") as mock_catalogue, \
+            patch("app.api.routes_stream.requests") as mock_requests:
+        mock_catalogue.get.return_value = cam
+        mock_requests.post.side_effect = Exception(f"502 Server Error: None for url: {cam.whep_url}")
+
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(whep_offer("cam01", _fake_request(), db=session, principal=viewer))
+
+    assert "secret" not in exc_info.value.detail
+    assert "user%40example.com" not in exc_info.value.detail
+    assert "secret" not in caplog.text
+
+
 def test_whep_offer_404_for_unknown_camera(session):
     viewer = Principal("viewer1", "viewer", None)
 
@@ -130,6 +152,24 @@ def test_whep_teardown_rejects_mismatched_host(session):
 
     assert exc_info.value.status_code == 400
     mock_requests.delete.assert_not_called()
+
+
+def test_whep_teardown_failure_never_leaks_credentials_to_logs(session, caplog):
+    viewer = Principal("viewer1", "viewer", None)
+    session_url = "http://103.250.160.189:8889/stream/cam01/whep/abc123"
+    authed_url = "http://user%40example.com:secret@103.250.160.189:8889/stream/cam01/whep/abc123"
+
+    with patch("app.api.routes_stream.catalogue") as mock_catalogue, \
+            patch("app.api.routes_stream.requests") as mock_requests, \
+            patch("app.api.routes_stream.with_stream_auth") as mock_with_auth:
+        mock_catalogue.get.return_value = _fake_camera()
+        mock_with_auth.return_value = authed_url
+        mock_requests.delete.side_effect = Exception(f"502 Server Error: None for url: {authed_url}")
+
+        result = whep_teardown("cam01", u=session_url, db=session, principal=viewer)
+
+    assert result.status_code == 204
+    assert "secret" not in caplog.text
 
 
 def test_whep_teardown_degrades_quietly_on_upstream_failure(session):
