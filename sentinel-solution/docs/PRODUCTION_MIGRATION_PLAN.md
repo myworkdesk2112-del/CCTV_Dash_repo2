@@ -152,6 +152,31 @@ review before implementation, same as it would if attempted now.
    `REVIEW_FINDINGS.md` call for; report actual precision/recall; justify
    `EMBEDDING_SIMILARITY_THRESHOLD` empirically instead of as a
    hand-picked default.
+3. **Candidate ANPR accuracy upgrade (proposed 2026-09-18, not started,
+   not approved for pre-submission work — see `CLAUDE.md` §4.1/§7/§31):**
+   an external suggestion (OpenCode) proposed replacing the current
+   `StubPlateDetector`/`PaddleOCR` path with a four-stage pipeline —
+   Indian-plate-fine-tuned YOLOv8/11 localizer, an STN/TPN perspective
+   rectifier, a CRNN or transformer recognizer trained on
+   CCPD/UFPR-ALPR + synthetic Gujarat plates, and a temporal-fusion
+   (attention-over-track) consensus step in place of `consensus_plate()`'s
+   position-wise voting. It targets today's known weaknesses honestly:
+   heuristic bottom-30% plate cropping, no perspective correction, and
+   single-frame OCR consensus. Before picking this up:
+   - `ultralytics` (YOLOv8/11) is AGPL-3.0 by default — needs the same
+     legal/procurement sign-off as item 1 above, or a permissively
+     licensed detector instead.
+   - No labeled Indian-plate training set or GPU training loop exists
+     in this repo yet; the "expected accuracy gains" numbers in the
+     original suggestion are illustrative, not measured — per
+     `CLAUDE.md` §24.14, no accuracy claim may be made until validated
+     on a defined dataset.
+   - This is exactly the kind of "new ANPR research contribution" and
+     "new Re-ID/embedding" work `CLAUDE.md` §4.1/§7 says not to start
+     before submission; only pick it up as part of a real post-hackathon
+     production hardening pass, and re-run this file's Phase 6 process
+     (legal sign-off, then real precision/recall) rather than trusting
+     the proposal's numbers.
 
 ### Phase 7 — Secrets and observability
 
