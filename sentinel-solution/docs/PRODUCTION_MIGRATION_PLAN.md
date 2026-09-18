@@ -195,3 +195,38 @@ process-level isolation to fix properly (a bigger change than a quick
 patch, and untestable here without a real unreachable-RTSP-host
 scenario), and `SEC-4` is an auth architecture change that needs the
 same explicit sign-off this plan itself required.
+
+## 5. What changed 2026-09-18 — user explicitly requested full production
+   rearchitecture despite the deadline
+
+Per an explicit user decision (confirmed after two rounds of warning
+about the 2026-09-28 deadline and this environment's lack of Docker/
+Kubernetes/cloud access — see `docs/PRODUCTION_READINESS.md` for the
+full record), real Phase 1/2/3/4/7 artifacts were written this session:
+
+- Phase 1: `backend/app/analytics/vector_search.py` (pgvector ANN
+  candidate search, not wired into `identity.py`'s default path).
+- Phase 2: `infra/docker/Dockerfile.{backend,frontend}`,
+  `infra/docker-compose.production.yml`, `infra/k8s/*.yaml`.
+- Phase 3: `.github/workflows/{backend,frontend}-ci.yml`.
+- Phase 4 (partial — the OIDC mechanism only, not the cookie/CSRF
+  replacement of the API-key header, which is the harder, riskier half
+  of this phase): `backend/app/api/sso_oidc.py`, additive to the
+  existing `auth.py`.
+- Phase 7 (partial — TLS template + secrets-manager interface doc, not
+  a real observability pipeline): `infra/nginx/nginx.conf.example`,
+  `infra/k8s/secret.example.yaml`.
+- Also (Model 3's regional-scale event bus, not in this plan's original
+  phase list but named in `SCALABILITY.md` §6): `backend/app/analytics/
+  kafka_bus.py`.
+
+**All of it is `DESIGN TARGET` or `IMPLEMENTED, UNVERIFIED`** — see
+`PRODUCTION_READINESS.md` for the gap-by-gap table and exactly what was
+and wasn't verified. Nothing here changed the pilot's actual runtime
+behavior: all new backend modules are lazy-imported and feature-flagged
+off by default, and the full 199-test backend suite was re-run after
+adding them with zero regressions. Not attempted: `SEC-4`'s actual
+cookie/CSRF auth replacement, `SWE-6`'s process isolation, any real ML
+validation, and anything requiring an actual Docker/Kubernetes/Kafka/
+pgvector/OIDC instance to exercise for real — none of that
+infrastructure exists in this environment.

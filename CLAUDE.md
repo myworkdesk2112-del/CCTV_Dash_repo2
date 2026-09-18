@@ -498,6 +498,24 @@ Important UI behavior:
 - `sentinel-solution/docs/HLD.md` — technical design.
 - `sentinel-solution/docs/SCALABILITY.md` — scale strategy.
 - `sentinel-solution/docs/REVIEW_FINDINGS.md` — technical review findings.
+- `sentinel-solution/docs/PRODUCTION_MIGRATION_PLAN.md` — the concrete,
+  phased path from "hackathon pilot" to "a real deployment a department
+  could run," explicitly **not** to be executed before the submission
+  deadline (see §7/§27/§31 below) unless the user has explicitly
+  overridden that, as happened 2026-09-18 (see the next file).
+- `sentinel-solution/docs/PRODUCTION_READINESS.md` — added 2026-09-18:
+  the honest gap-by-gap status table for that migration plan's
+  scaffolds (pgvector Re-ID search, Kafka federation bus, OIDC auth,
+  Docker/Kubernetes/CI artifacts). Everything in it is labeled `DESIGN
+  TARGET` or `IMPLEMENTED, UNVERIFIED` — this environment has no
+  Docker/kubectl/cloud access, so none of it has been deployed or
+  tested against real infrastructure. Read this before claiming any
+  production-hardening item is "done."
+- `infra/` — the actual Docker/Kubernetes/nginx artifacts
+  `PRODUCTION_READINESS.md` describes. See `infra/README.md` for the
+  verification checklist before trusting any of it.
+- `.github/workflows/` — CI workflow definitions (untested — never
+  triggered by a real GitHub Actions runner from this environment).
 
 When a referenced path differs in the actual repository, find the current file instead of inventing a replacement path.
 
