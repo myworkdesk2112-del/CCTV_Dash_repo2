@@ -3,6 +3,7 @@ import {
   IconFolder, IconEvidence, IconReport, IconPulse, IconLayers,
   IconSettings, IconShield,
 } from "../icons";
+import { clickableProps } from "../a11y";
 
 // Grouped by what an operator is trying to DO, not by which model of the
 // hackathon spec a feature belongs to — the previous grouping leaked our
@@ -76,7 +77,8 @@ export default function Sidebar({ view, onNavigate, coverage }) {
               <div
                 key={item.id}
                 className={`navitem ${view === item.id ? "active" : ""}`}
-                onClick={() => onNavigate(item.id)}
+                aria-current={view === item.id ? "page" : undefined}
+                {...clickableProps(() => onNavigate(item.id))}
               >
                 <Icon />
                 {item.label}

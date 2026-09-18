@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { api } from "../api";
-import { TierBadge } from "./VehicleTimeline";
+import EvidenceTierBadge from "./EvidenceTierBadge";
 
 // Attribute-based search — GET /vehicle/search-by-attributes has existed on
 // the backend since early in the build (the "plate never read anywhere"
@@ -118,7 +118,7 @@ export default function SearchView({ onOpenPlate, embedded = false }) {
                     <td style={{ padding: "8px 10px", fontFamily: "var(--mono)" }}>{new Date(m.observed_at).toLocaleString()}</td>
                     <td style={{ padding: "8px 10px", fontFamily: "var(--mono)" }}>{m.plate || <span style={{ color: "var(--text-dim)" }}>anonymous</span>}</td>
                     <td style={{ padding: "8px 10px" }}>{m.vehicle_type || "—"} · {m.color || "—"}</td>
-                    <td style={{ padding: "8px 10px" }}><TierBadge cls={m.evidence_class} /><div style={{ fontSize: 10.5, color: "var(--text-dim)", marginTop: 4 }}>{m.evidence_class_reason}</div></td>
+                    <td style={{ padding: "8px 10px" }}><EvidenceTierBadge tier={m.evidence_class} /><div style={{ fontSize: 10.5, color: "var(--text-dim)", marginTop: 4 }}>{m.evidence_class_reason}</div></td>
                   </tr>
                 ))}
                 {!result.matches.length && (

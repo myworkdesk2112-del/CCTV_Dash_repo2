@@ -1,46 +1,13 @@
+import EvidenceTierBadge from "./EvidenceTierBadge";
+
 // Renders the vehicle journey as CONFIRMED (OBSERVED) sightings interleaved
 // with INFERRED camera-less segments (geo-temporal layer, see
 // analytics/geo.py). The visual distinction is the point: a solid marker is
 // real camera evidence; a dashed connector is an inference the operator must
 // read as such, never as observed fact.
-
-// Evidence tier comes from the backend (analytics/evidence_class.py) and is
-// never re-derived here — a badge computed in the browser could drift from
-// the row it labels. `exportable_as_evidence` is likewise the backend's
-// decision; this component only renders it.
-const TIER = {
-  CONFIRMED: {
-    label: "CONFIRMED",
-    color: "var(--confirmed)",
-    bg: "var(--confirmed-bg)",
-    title: "Directly evidenced sighting (e.g. plate-confirmed).",
-  },
-  PROBABLE: {
-    label: "PROBABLE",
-    color: "var(--warn)",
-    bg: "var(--warn-bg)",
-    title: "Multiple supporting signals, but still requires investigator verification.",
-  },
-  LEAD_ONLY: {
-    label: "LEAD ONLY",
-    color: "var(--danger)",
-    bg: "var(--danger-bg)",
-    title: "Investigative Lead Only — Low Visual Confidence. Appearance-based match, not a confirmed sighting.",
-  },
-};
-
-export function TierBadge({ cls }) {
-  const t = TIER[cls] || TIER.LEAD_ONLY;
-  return (
-    <span
-      className="state-badge"
-      style={{ color: t.color, background: t.bg, fontWeight: 700 }}
-      title={t.title}
-    >
-      {t.label}
-    </span>
-  );
-}
+//
+// `exportable_as_evidence` below is the backend's decision (analytics/
+// evidence_class.py); this component only renders it, never re-derives it.
 export default function VehicleTimeline({ sightings, routeSegments, selectedIndex, onSelect, onExport }) {
   if (!sightings?.length) {
     return <p className="timeline__empty">No movement history yet for this vehicle.</p>;
@@ -66,11 +33,24 @@ export default function VehicleTimeline({ sightings, routeSegments, selectedInde
               <div className="timeline__marker" />
               <div className="timeline__body">
                 <div className="timeline__row">
-                  <strong>{s.camera_id}</strong>
+                  {/* The real "Export as Evidence" button below means this
+                      row can't itself be role="button" — a focusable
+                      control can't nest another one legibly for a screen
+                      reader. This heading is the keyboard-operable
+                      equivalent of the row-click, with the mouse
+                      convenience kept on the row via onClick above. */}
+                  <button
+                    type="button"
+                    className="timeline__select"
+                    aria-pressed={i === selectedIndex}
+                    onClick={(e) => { e.stopPropagation(); onSelect(i); }}
+                  >
+                    {s.camera_id}
+                  </button>
                   <span>{new Date(s.observed_at).toLocaleString()}</span>
                 </div>
                 <div className="timeline__row timeline__row--sub">
-                  <TierBadge cls={s.evidence_class} />
+                  <EvidenceTierBadge tier={s.evidence_class} />
                   {(s.evidence_class == null || s.evidence_class === "LEAD_ONLY") && (
                     <span style={{ fontSize: 10.5, color: "var(--danger)", fontWeight: 600 }}>
                       Investigative Lead Only — Low Visual Confidence
