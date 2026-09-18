@@ -82,6 +82,9 @@ _ADDITIVE_MIGRATIONS = [
     ("camera_registry", "homography_calibrated_at", "TIMESTAMP"),
     ("camera_registry", "homography_reference_note", "VARCHAR"),
     ("vehicle_event", "speed_kmh", "FLOAT"),
+    ("camera_registry", "deregistered", "BOOLEAN DEFAULT FALSE NOT NULL"),
+    ("camera_registry", "deregistered_reason", "VARCHAR"),
+    ("camera_registry", "deregistered_at", "TIMESTAMP"),
 ]
 
 

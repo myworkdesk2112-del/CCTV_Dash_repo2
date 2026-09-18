@@ -107,6 +107,23 @@ class CameraRegistry(Base):
     maintenance_reason = Column(String, nullable=True)
     maintenance_until = Column(DateTime, nullable=True)
 
+    # Deregistration — distinct from under_maintenance (temporary, expected
+    # to come back) and from actually deleting the row (never done: this
+    # camera's id may already be the camera_id on real VehicleEvent/Alert
+    # evidence rows, and CLAUDE.md's evidence-preservation stance forbids
+    # dropping/rewriting that — see db/session.py's migration comments on
+    # treating sentinel.db as valuable state). Deregistering a camera means
+    # "no longer an active part of this deployment" (decommissioned,
+    # returned to the vendor, department opted out) while keeping its
+    # registry row, audit trail, and any historical events/alerts intact
+    # and queryable. Re-registering (POST /cameras/{id}/register) clears
+    # this back to active without needing a fresh onboard call. Set only
+    # via POST /cameras/{id}/deregister|register (admin-only), never
+    # inferred from health/liveness signals.
+    deregistered = Column(Boolean, nullable=False, default=False)
+    deregistered_reason = Column(String, nullable=True)
+    deregistered_at = Column(DateTime, nullable=True)
+
     # Named-anomaly-alert config (see analytics/anomaly.py). Both opt-in,
     # per-camera, set at onboarding time — a camera with neither set never
     # produces anomaly alerts, only watchlist ones, same as before this

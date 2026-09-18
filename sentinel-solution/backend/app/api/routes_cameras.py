@@ -110,6 +110,11 @@ def _merged_camera_view(
         "maintenance_until": (
             registry.maintenance_until.isoformat() if registry and registry.maintenance_until else None
         ),
+        "deregistered": registry.deregistered if registry else False,
+        "deregistered_reason": registry.deregistered_reason if registry else None,
+        "deregistered_at": (
+            registry.deregistered_at.isoformat() if registry and registry.deregistered_at else None
+        ),
         "is_restricted_zone": registry.is_restricted_zone if registry else False,
         "expected_direction_deg": registry.expected_direction_deg if registry else None,
         "install_date": registry.install_date.isoformat() if registry and registry.install_date else None,
@@ -144,6 +149,7 @@ def list_cameras(
     camera_type: str | None = None,
     is_healthy: bool | None = None,
     live: bool | None = None,
+    deregistered: bool | None = None,
     q: str | None = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_role("viewer")),
@@ -164,9 +170,12 @@ def list_cameras(
 
     Optional query-param filters (found missing — client-side-only before,
     see TASKS.md's P3 list — a real fix needed at 80k-camera scale, not
-    just the pilot's 30): department/camera_type/is_healthy/live are exact
-    matches, `q` is a case-insensitive substring match against id or
-    location name."""
+    just the pilot's 30): department/camera_type/is_healthy/live/
+    deregistered are exact matches, `q` is a case-insensitive substring
+    match against id or location name. Deregistered cameras are NOT
+    excluded by default (preserves the existing response shape for callers
+    who don't pass the filter) — pass `deregistered=false` to see only the
+    active fleet."""
     live_cams = catalogue.cameras
     registered = _registered_cameras(db, principal)
     registry_by_id = {r.id: r for r in registered}
@@ -188,6 +197,8 @@ def list_cameras(
         rows = [r for r in rows if r["is_healthy"] == is_healthy]
     if live is not None:
         rows = [r for r in rows if r["live"] == live]
+    if deregistered is not None:
+        rows = [r for r in rows if r["deregistered"] == deregistered]
     if q:
         needle = q.lower()
         rows = [r for r in rows if needle in r["id"].lower() or (r["location"] and needle in r["location"].lower())]
@@ -217,12 +228,23 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
     # instead, so gap-analysis stays a genuine anomaly list, not a mix of
     # real problems and expected, human-acknowledged downtime.
     under_maintenance = sorted(cid for cid, r in registered.items() if r.under_maintenance)
+    # A decommissioned camera (deregistered) is neither an unexpected
+    # failure nor an ageing-infrastructure risk to flag — it's intentionally
+    # out of service, same reasoning as under_maintenance's own exclusion
+    # just above. Reported as its own explicit list instead.
+    deregistered_ids = sorted(cid for cid, r in registered.items() if r.deregistered)
     unhealthy = sorted(
-        cid for cid, r in registered.items() if r.is_healthy is False and not r.under_maintenance
+        cid for cid, r in registered.items()
+        if r.is_healthy is False and not r.under_maintenance and not r.deregistered
     )
-    missing_install_date = sorted(cid for cid, r in registered.items() if r.install_date is None)
+    missing_install_date = sorted(
+        cid for cid, r in registered.items() if r.install_date is None and not r.deregistered
+    )
     ageing_cutoff = dt.datetime.utcnow() - dt.timedelta(days=365.25 * config.CAMERA_AGEING_THRESHOLD_YEARS)
-    ageing = sorted(cid for cid, r in registered.items() if r.install_date is not None and r.install_date < ageing_cutoff)
+    ageing = sorted(
+        cid for cid, r in registered.items()
+        if r.install_date is not None and r.install_date < ageing_cutoff and not r.deregistered
+    )
 
     by_department: dict[str, int] = {}
     for r in registered.values():
@@ -238,6 +260,7 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
         "missing_gis_coordinates": missing_gis,
         "unhealthy": unhealthy,
         "under_maintenance": under_maintenance,
+        "deregistered": deregistered_ids,
         "missing_install_date": missing_install_date,
         "ageing": ageing,
         "ageing_threshold_years": config.CAMERA_AGEING_THRESHOLD_YEARS,
@@ -298,6 +321,7 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
         ["Missing GIS coordinates", len(report["missing_gis_coordinates"])],
         ["Unhealthy", len(report["unhealthy"])],
         ["Under maintenance", len(report["under_maintenance"])],
+        ["Deregistered", len(report["deregistered"])],
         ["Missing install date", len(report["missing_install_date"])],
         [f"Ageing (installed >{report['ageing_threshold_years']:g}y ago)", len(report["ageing"])],
     ]
@@ -335,6 +359,7 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
     _id_list_section("Missing GIS coordinates", report["missing_gis_coordinates"])
     _id_list_section("Unhealthy", report["unhealthy"])
     _id_list_section("Under maintenance", report["under_maintenance"])
+    _id_list_section("Deregistered", report["deregistered"])
     _id_list_section("Missing install date", report["missing_install_date"])
     _id_list_section(f"Ageing (installed >{report['ageing_threshold_years']:g}y ago)", report["ageing"])
 
@@ -491,6 +516,67 @@ def set_maintenance_status(
     }
 
 
+class DeregisterRequest(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/{camera_id}/deregister")
+def deregister_camera(
+    camera_id: str,
+    body: DeregisterRequest,
+    db: Session = Depends(get_db),
+    admin: Principal = Depends(require_role("admin")),
+):
+    """Marks a camera as no longer an active part of this deployment
+    (decommissioned, returned to vendor, department opted out) — distinct
+    from `under_maintenance` (temporary, expected back) and NOT a delete:
+    the registry row, its audit trail, and any historical VehicleEvent/
+    Alert rows that reference this camera_id all stay intact (CLAUDE.md's
+    evidence-preservation stance forbids dropping rows real evidence may
+    reference). Admin-only, same reasoning as maintenance-status: a
+    deliberate human decision, never inferred from health/liveness."""
+    registry = db.get(CameraRegistry, camera_id)
+    if registry is None:
+        raise HTTPException(status_code=404, detail=f"camera {camera_id} is not registered — onboard it first")
+
+    registry.deregistered = True
+    registry.deregistered_reason = body.reason
+    registry.deregistered_at = dt.datetime.utcnow()
+    db.add(CameraAuditLog(camera_id=camera_id, user_id=admin.user_id, action="deregistered"))
+    db.commit()
+    return {
+        "id": camera_id,
+        "deregistered": True,
+        "deregistered_reason": registry.deregistered_reason,
+        "deregistered_at": registry.deregistered_at.isoformat(),
+    }
+
+
+@router.post("/{camera_id}/register")
+def reregister_camera(
+    camera_id: str,
+    db: Session = Depends(get_db),
+    admin: Principal = Depends(require_role("admin")),
+):
+    """Reverses `deregister_camera` above — brings a previously-deregistered
+    camera back into active service without needing a fresh onboard call
+    (its existing department/GIS/calibration metadata is untouched).
+    Requires the camera to already be registered; onboarding a genuinely
+    new camera is still POST /cameras. Idempotent: calling this on a
+    camera that isn't currently deregistered just confirms the active
+    state rather than erroring."""
+    registry = db.get(CameraRegistry, camera_id)
+    if registry is None:
+        raise HTTPException(status_code=404, detail=f"camera {camera_id} is not registered — onboard it first")
+
+    registry.deregistered = False
+    registry.deregistered_reason = None
+    registry.deregistered_at = None
+    db.add(CameraAuditLog(camera_id=camera_id, user_id=admin.user_id, action="re_registered"))
+    db.commit()
+    return {"id": camera_id, "deregistered": False}
+
+
 class CalibrationPointIn(BaseModel):
     image_x: float
     image_y: float
@@ -570,6 +656,7 @@ def export_cameras_csv(
     writer.writerow([
         "id", "location", "department", "vendor", "camera_type", "latitude", "longitude",
         "is_healthy", "last_seen_live_at", "under_maintenance", "maintenance_reason",
+        "deregistered", "deregistered_reason",
         "is_restricted_zone", "expected_direction_deg",
         "install_date", "coverage_radius_m", "onboarded", "live",
     ])
@@ -581,6 +668,7 @@ def export_cameras_csv(
             row["id"], row["location"], row["department"], row["vendor"], row["camera_type"],
             row["latitude"], row["longitude"], row["is_healthy"], row["last_seen_live_at"],
             row["under_maintenance"], row["maintenance_reason"],
+            row["deregistered"], row["deregistered_reason"],
             row["is_restricted_zone"], row["expected_direction_deg"], row["install_date"],
             row["coverage_radius_m"], row["onboarded"], row["live"],
         ])
