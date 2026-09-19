@@ -29,10 +29,27 @@ also the canonical instructions file for tools that read `AGENTS.md`).
 - **`docs/assets/`** — the presentation deck (`.pptx`/`.pdf`) and
   supporting screenshots; `docs/assets/archive/` holds superseded
   versions kept for history only.
-- **`deck-build/`** — the script that generates the presentation deck
-  from this repo's own docs (`docs/assets/Sentinel_Solution_Presentation.pptx`).
+- **`sentinel-solution/deck-build/`** — the script that generates the
+  presentation deck from this repo's own docs. Current generator is
+  **`build_deck_v3.py`** → `docs/assets/Sentinel_Solution_Presentation.pptx`
+  (21 slides); `build_deck.py`/`build_deck_v2.py` are the superseded v1/v2
+  generators, kept for history.
+
+## Setup
+
+Windows: run **`setup.bat`** from this directory. It creates
+`sentinel-solution/backend/.venv`, installs into it (never the global
+interpreter), seeds `.env` from `.env.example` without clobbering an
+existing one, runs the backend test suite as an install check, and
+installs frontend dependencies. `--with-ml` adds the real YOLOv8 +
+PaddleOCR stack; `--backend` skips the frontend. Safe to re-run.
+
+Manual/POSIX steps: see `sentinel-solution/README.md`.
 
 ## Deadline
 
-Phase 1 submission: **15 September 2026**. Event/Grand Finale: 22–23 Sep
-2026. See `docs/hackathon/TASKS.md` for current status.
+Phase 1 submission: **28 September 2026**. Event/Grand Finale: **12–13
+October 2026**. (Corrected 2026-09-17 against the live
+sentinel.gujarat.gov.in homepage — this was previously 15 Sep / 22–23 Sep,
+and the date has now moved twice. Re-check the live site before relying on
+it.) See `docs/hackathon/TASKS.md` for current status.
