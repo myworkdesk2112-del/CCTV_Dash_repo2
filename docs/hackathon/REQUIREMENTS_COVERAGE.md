@@ -18,7 +18,14 @@ as of 2026-09-05 — this date has moved twice, re-check the live site before
 relying on it). We are a **Model 1 + Model 2 hybrid**, with Model 3 (VMS
 Federation) now also genuinely built as extra hybrid-architecture scope
 (**revised 2026-09-11** — see section C below and `STRATEGY.md`'s "Model
-choice" section); Model 4 remains documented roadmap, not built.
+choice" section). **Updated 2026-09-19:** Model 4 is no longer purely a
+documented roadmap — a scoped **Model 4 pilot slice** (density
+aggregation, storage-tier metadata, central pilot rollup, camera
+ANPR-suitability scoring; see the Model 4 rows in section C) was built
+and merged 2026-09-13, AUTOMATED-TEST VERIFIED. It is **not** the full
+state-level central VMS/command-centre platform — Kafka, Kubernetes,
+Triton, TimescaleDB, S3, and real government-DB integration remain
+deliberately out of scope and undeployed.
 
 ---
 
@@ -85,7 +92,7 @@ Model 1/2 fully closed out. See
 
 | Deliverable | Status | Notes |
 |---|---|---|
-| 1. Solution Presentation (PPT/PDF) | ✅ Done (v2) | `Sentinel_Solution_Presentation.pptx` (20 slides) — v2 redesign 2026-09-04: real flowchart-shape diagrams with connector arrows (not text-box rectangles), Bahnschrift/Segoe UI type pairing, ~50% less text per slide, a references/sources slide. `Sentinel_Solution_Presentation_v1.pptx` kept as fallback. Built from and consistent with HLD.md/SCALABILITY.md; every slide visually verified via real PowerPoint COM export-to-PNG, not just python-pptx round-trip (a real bug — Python 3 true-division producing float EMU values, which corrupted the file for real PowerPoint despite python-pptx reading it back fine — was caught this way and fixed). Regenerate via `deck-build/build_deck_v2.py`. |
+| 1. Solution Presentation (PPT/PDF) | ✅ Done (v3) | `Sentinel_Solution_Presentation.pptx` (**21 slides**) — **regenerate via `deck-build/build_deck_v3.py`** (v3 repositioning pass 2026-09-11 per `DECISION_REVIEW_2026-09-11.md`; layout/overflow fixes, Model 4 pilot card, evidence-integrity governance cards and the §63 red→amber correction added 2026-09-19). Every slide re-rendered and visually checked via LibreOffice + PyMuPDF, and the deck passes the pptx structural validator. Historical note on v2 below. v2 redesign 2026-09-04: real flowchart-shape diagrams with connector arrows (not text-box rectangles), Bahnschrift/Segoe UI type pairing, ~50% less text per slide, a references/sources slide. `Sentinel_Solution_Presentation_v1.pptx` kept as fallback. Built from and consistent with HLD.md/SCALABILITY.md; every slide visually verified via real PowerPoint COM export-to-PNG, not just python-pptx round-trip (a real bug — Python 3 true-division producing float EMU values, which corrupted the file for real PowerPoint despite python-pptx reading it back fine — was caught this way and fixed). Regenerate via `deck-build/build_deck_v2.py`. |
 | 2. Technical Proposal / HLD | ✅ Done | `HLD.md` (verified against real runtime) |
 | 3. Demo video — own feed (2–3 min, **must be a working backend**, no mockups) | 🟡 In progress, newly de-risked | Browser-flow footage + real-YOLOv8 montage already captured; terminal proof shot/captions/ffmpeg concat still outstanding. **Organizer guidance received 2026-09-05** (their core team, relayed by the user): for this demo, using any clearly-visible real sandbox camera is fine/expected — no longer required to be literally "our own feed." `cam06` (a real, close-range, front-facing camera found today) is now real plate-detection evidence for this video: 8/13 real frames produced a pattern-valid plate read after today's OCR fix, a stronger and more honest demo beat than the synthetic-composite plan. |
 | 4. Live demo — govt feed + output report (plates + timestamps) | ⛔ Externally blocked | **Organizer guidance received 2026-09-05:** the hackathon's own sandbox is still being fixed on their end for this test case — treat as blocked on them, not on us; don't force this recording against a sandbox the organizers themselves say isn't ready. Revisit once they signal it's fixed. |
@@ -103,13 +110,13 @@ Model 1/2 fully closed out. See
 | 06 Scalability & PoC readiness | 🟡 8/11 required items documented in `SCALABILITY.md`; backup/encryption/network-segmentation missing (found + fixed 2026-09-05, see below) |
 | 07 Submission completeness | 🟡 Docs done; own-feed video near-complete; govt-feed video is the one real remaining gap |
 
-## G. Bonus Consideration (§B) — we hit most
+## G. Bonus Consideration (§B) — updated 2026-09-19 against `DECISION_REVIEW_2026-09-11.md`
 
-- ✅ Innovative hybrid architecture (Model 1+2 built and mandatory; Model 3 also genuinely built, see §C; Model 4 documented roadmap)
-- ✅ Advanced cross-camera vehicle tracking / correlation (our core)
+- ✅ Innovative hybrid architecture — Model 1+2 built and mandatory; Model 3 genuinely built (§C); Model 4 is a real, tested **pilot slice** (density aggregation, storage tiers, central rollup, ANPR-suitability scoring — merged 2026-09-13), not the full statewide central VMS
+- ⚠️ **Advanced cross-camera vehicle tracking / correlation — reframe, do not claim as proven.** 11,992 of 12,251 cross-camera links (97.8%) rest on an appearance-only signal measured at a **41.87% false-positive rate** on real confirmed-different-vehicle pairs, and zero plates repeat across cameras in the real database to validate against (`DECISION_REVIEW_2026-09-11.md`). Per that review: *"Do not demo cross-camera vehicle tracking as a capability... demo the governance around cross-camera linking instead."* What we can actually claim: explainable evidence-tiered linking (CONFIRMED/PROBABLE/LEAD ONLY) that refuses to present a weak appearance match as a tracked vehicle — that governance layer is real and demonstrated.
 - ✅ Analytics beyond ANPR (dwell / speed / direction; attribute search)
-- ✅ Edge-processing / bandwidth-optimisation story (SCALABILITY.md)
-- ✅ Cybersecurity / privacy / auditability / RBAC (real, not checklist)
+- 🟡 Edge-processing / bandwidth-optimisation — real architectural principle (`SCALABILITY.md`'s 640 Mbps vs. 160 Gbps structured-events story), but it is an arithmetic projection from the ~30-camera pilot's measured per-stream cost, not a proven result at statewide scale
+- ✅ Cybersecurity / privacy / auditability / RBAC (real, not checklist) — strengthened 2026-09-19 with **write-time evidence integrity**: `analytics/evidence_integrity.py` SHA-256-hashes each evidence crop immediately after `cv2.imwrite` returns and stamps the concrete detector/plate-detector/OCR class names in force (so the real-vs-stub seam is on the record, which config alone cannot show), plus a §63-oriented provenance package and printable Part A/Part B certificate (`api/routes_evidence.py`). Export is gated to CONFIRMED only, purpose-bound, and audit-logged before the artefact is produced. **AUTOMATED-TEST VERIFIED** — 27 tests including one that drives the real `AnalyticsPipeline` and one asserting a post-write edit is reported as `HASH_MISMATCH`; the additive migration was separately run against a simulated pre-change DB (columns added, existing rows preserved, NULL not fabricated, idempotent). **Not** field-verified: never run against the real accumulated `sentinel.db`, no UI control wired, wording not legally reviewed.
 - ✅ Operational dashboards, automated alerts, health monitoring, APIs
 
 ---

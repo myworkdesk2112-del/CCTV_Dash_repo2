@@ -25,6 +25,7 @@ from .api import (
     routes_alerts,
     routes_auth,
     routes_cameras,
+    routes_evidence,
     routes_federation,
     routes_stream,
     routes_vehicle,
@@ -78,6 +79,7 @@ app.include_router(routes_alerts.router)
 app.include_router(routes_stream.router)
 app.include_router(routes_admin.router)
 app.include_router(routes_federation.router)
+app.include_router(routes_evidence.router)
 
 def _build_detector():
     """Real YOLOv8 vehicle detector if ultralytics + weights are available

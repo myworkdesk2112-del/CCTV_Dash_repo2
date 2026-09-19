@@ -83,6 +83,13 @@ is encoded directly in `streaming/rtsp_client.py`:
 
 ## Running locally
 
+**Windows one-shot:** run `setup.bat` from the repository root instead of the
+steps below — it creates `backend/.venv`, installs into it (never the global
+interpreter), seeds `.env` from `.env.example` without overwriting an existing
+one, runs the test suite as an install check, and installs frontend deps.
+`setup.bat --with-ml` adds the real YOLOv8/PaddleOCR stack; `setup.bat
+--backend` skips the frontend. Safe to re-run.
+
 ```bash
 cd backend
 python -m venv .venv
@@ -124,6 +131,18 @@ Then:
 - `POST http://localhost:8000/watchlist` `{"plate": "GJ01AB1234", "reason": "stolen"}` (admin)
 - `GET http://localhost:8000/alerts` — live alert feed (investigator+)
 - `POST http://localhost:8000/auth/api-keys` — provision a key for another role (admin)
+- `GET http://localhost:8000/evidence/event/{id}/verify` — recompute the stored
+  crop's SHA-256 and compare it to the hash taken at write time (viewer+;
+  deliberately **not** gated on evidence class — checking whether an image was
+  altered is an integrity question, and an investigator assessing a LEAD_ONLY
+  lead is entitled to the answer)
+- `GET http://localhost:8000/evidence/event/{id}/package?purpose=...` — the
+  §63-oriented provenance package: write-time hash, production method
+  (which detector/OCR actually ran), device and owning department, and the
+  access/export audit trail (investigator+, **CONFIRMED tier only**)
+- `GET http://localhost:8000/evidence/event/{id}/certificate.pdf?purpose=...` —
+  the same package as a printable Part A/Part B form (investigator+,
+  CONFIRMED only)
 
 ## RBAC
 

@@ -85,6 +85,9 @@ _ADDITIVE_MIGRATIONS = [
     ("camera_registry", "deregistered", "BOOLEAN DEFAULT FALSE NOT NULL"),
     ("camera_registry", "deregistered_reason", "VARCHAR"),
     ("camera_registry", "deregistered_at", "TIMESTAMP"),
+    ("vehicle_event", "crop_sha256", "VARCHAR"),
+    ("vehicle_event", "crop_hashed_at", "TIMESTAMP"),
+    ("vehicle_event", "production_stamp", "VARCHAR"),
 ]
 
 

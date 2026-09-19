@@ -20,6 +20,16 @@ psycopg2-binary==2.9.9
 # access or ML deps needed. Run from backend/: `python -m pytest tests -v`.
 pytest==9.1.1
 
+# Required by starlette.testclient, which tests/test_session_auth.py and
+# tests/test_evidence_integrity.py use to exercise the real ASGI app (auth
+# headers, Query validation, role gating — none of which a direct function
+# call goes through). Was missing until 2026-09-19: collection of those two
+# files hard-errors in a clean venv ("The starlette.testclient module
+# requires the httpx package"), which only went unnoticed because the
+# machines it was run on happened to have httpx installed globally. Found by
+# actually running setup.bat against a fresh virtualenv.
+httpx==0.28.1
+
 # Real analytics deps — see requirements-ml.txt. main.py tries to construct
 # YoloVehicleDetector/PaddleOcrPlateReader at startup and falls back to the
 # honest no-op stubs (with a loud warning) if these aren't installed, so the

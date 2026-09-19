@@ -267,6 +267,22 @@ class VehicleEvent(Base):
     bbox_x2 = Column(Float, nullable=True)
     bbox_y2 = Column(Float, nullable=True)
 
+    # Write-time integrity + provenance for the crop above
+    # (analytics/evidence_integrity.py). Computed once, immediately after
+    # the file is written, and never recomputed into these columns — a
+    # hash refreshed at export time would prove nothing about the bytes
+    # between capture and export (CLAUDE.md §6 Priority B). NULL on every
+    # row written before this feature existed, which the verification
+    # path reports as NO_HASH_RECORDED rather than as a failure: absence
+    # of a hash means the guarantee was never established, not that the
+    # file was tampered with.
+    crop_sha256 = Column(String, nullable=True)
+    crop_hashed_at = Column(DateTime, nullable=True)
+    # Concrete detector/plate-detector/OCR class names plus weights and
+    # thresholds in force at write time. Records the real-vs-stub seam,
+    # which config alone cannot show.
+    production_stamp = Column(String, nullable=True)
+
     camera = relationship("CameraRegistry")
     identity = relationship("VehicleIdentity")
 

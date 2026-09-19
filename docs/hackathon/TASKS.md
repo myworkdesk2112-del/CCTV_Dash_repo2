@@ -14,6 +14,72 @@ Cross-check against `REQUIREMENTS_COVERAGE.md` (the authoritative
 deliverable-status matrix) and `sentinel-solution/README.md` ("Known
 issues") before trusting this file if it's more than a day or two old.
 
+## 2026-09-19 — write-time evidence integrity + §63-oriented export (done)
+
+Closes `CLAUDE.md` §6 Priority B / §21 P1 #6–7, the last bonus-aligned
+engineering gap (`REQUIREMENTS_COVERAGE.md` §G, "auditability"). Picked
+because P0's only remaining item is the own-feed demo *recording*, which
+needs a human at a screen, not code.
+
+- **`analytics/evidence_integrity.py` (new)** — SHA-256 of the evidence
+  crop, computed by `pipeline.py` immediately after `cv2.imwrite` returns
+  and stored with the timestamp it was taken at. Never recomputed into
+  that column: a hash refreshed at export time proves nothing about the
+  bytes between capture and export, which `CLAUDE.md` §6 calls out
+  explicitly. `verify_crop()` recomputes and compares, returning
+  VERIFIED / HASH_MISMATCH / FILE_MISSING / NO_HASH_RECORDED — a mismatch
+  is reported, never silently healed by overwriting the stored hash.
+- **Production stamp** — records the concrete detector/plate-detector/
+  OCR/Re-ID *class names* in force at write time, not just the configured
+  weight filenames, because `StubPlateDetector` and `YoloPlateDetector`
+  can run with identical config and produce completely different
+  artefacts. An evidence package that can't tell a reviewer which one ran
+  isn't a provenance record. `build_rev` comes from `SENTINEL_BUILD_REV`
+  and reads "unknown" when the deployment doesn't supply it, rather than
+  inventing a version the code can't verify about itself.
+- **`api/routes_evidence.py` (new)** — `GET /evidence/event/{id}/verify`
+  (viewer+, any evidence class: checking whether an image was altered is
+  an integrity question, and an investigator evaluating a LEAD_ONLY lead
+  is entitled to the answer), plus `/package` (JSON) and
+  `/certificate.pdf` (printable Part A/Part B form), both investigator+,
+  purpose-bound (8-char floor), **gated to CONFIRMED only** via the
+  existing `evidence_class.EXPORTABLE_CLASSES` — PROBABLE is refused too
+  — and audit-logged *before* the artefact is produced so an attempted
+  export is on the record even if rendering fails. The PDF renders the
+  same package the JSON returns rather than recomputing it, so the two
+  can't disagree about one artefact. Legal wording lives in a single
+  `legal_review_notice()` for the same reason.
+- **3 additive columns** (`vehicle_event.crop_sha256`, `crop_hashed_at`,
+  `production_stamp`) through the existing `session.py` mechanism.
+- **Real bug caught by its own test**: the device block used
+  `getattr(camera, "name", None)` — `CameraRegistry` has `location_name`,
+  not `name`, so the getattr default would have shipped a silently-empty
+  provenance field forever. Now reads the real columns directly, with a
+  test asserting the value is actually present.
+
+**Verified:** 249/249 backend tests pass (222 baseline + 27 new), zero
+regressions. The 27 include one that drives the real `AnalyticsPipeline`
+and asserts the stored hash matches an independently computed hash of the
+file on disk; one that edits the file post-write and asserts
+HASH_MISMATCH; one asserting legacy (pre-feature) rows report
+NO_HASH_RECORDED rather than VERIFIED *or* a tamper alarm (~12,280 real
+rows predate this); and 7 HTTP-layer tests via `TestClient`, which are
+the only ones that actually exercise the purpose floor and the role gate
+(direct function calls bypass FastAPI's `Query`/`require_role`
+entirely). Separately runtime-verified: the additive migration against a
+simulated pre-change DB — adds exactly the 3 columns, preserves existing
+rows, leaves the new ones NULL rather than fabricating values, and is
+idempotent on re-run. App boots with the router registered (3 paths in
+the OpenAPI schema, 41 total).
+
+**Deliberately NOT claimed:** never run against the real accumulated
+`sentinel.db` (not present in this checkout); no frontend control is
+wired, so there is no click-through demo of an export yet; the §63
+wording is "§63-oriented" and has had no legal review. Deck updated
+accordingly — Evaluation Readiness moves this item red→amber (not green),
+and Honest Gaps now reads "built & tested, no UI control or legal review
+yet" instead of "not yet built".
+
 ## 2026-09-13 (continued) — Model 2 "≥2 different systems" closed (done)
 
 Per CLAUDE.md §10, faking or relabeling a single source was ruled out;

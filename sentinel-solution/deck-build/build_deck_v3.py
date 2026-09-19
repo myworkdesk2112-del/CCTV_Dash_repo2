@@ -352,26 +352,32 @@ txt(s, Inches(0.6), Inches(5.45), Inches(12.1), Inches(1.5),
     size=13.5, color=NAVY, bold=True, line_spacing=1.32, font=F_BODY_L)
 
 # ============================================================ 5 — MODEL
-s = content_slide("Solution Model", "Model 1 + Model 2 + Model 3 — a real hybrid, built and tested")
-cards = [("01", "Registry & GIS", "Mandatory foundation", "done"), ("02", "Unified Viewing", "Direct integration, ≥2 independent systems — Gujarat sandbox + Caltrans D3 public CCTV API", "done"), ("03", "VMS Federation", "Built & tested — Sentinel + NYC Open Data", "done")]
-cw = Inches(3.95); x0 = Inches(0.6)
+s = content_slide("Solution Model", "Model 1 + 2 + 3 + a Model 4 pilot slice — a real hybrid, built and tested", title_size=25)
+cards = [
+    ("01", "Registry & GIS", "Mandatory foundation", "done"),
+    ("02", "Unified Viewing", "Direct integration, ≥2 independent systems — Gujarat sandbox + Caltrans D3 public CCTV API", "done"),
+    ("03", "VMS Federation", "Built & tested — Sentinel + NYC Open Data", "done"),
+    ("04", "Model 4 — Pilot Slice", "Density aggregation, storage tiers, central rollup, ANPR-suitability — tested on master. Not the full statewide platform.", "partial"),
+]
+cw = Inches(2.9); x0 = Inches(0.6); ch = Inches(3.6)
 for i, (num, title, sub, kind) in enumerate(cards):
     x = x0 + i * (cw + Inches(0.15))
     fill = NAVY if kind == "done" else SURFACE
-    rrect(s, x, Inches(1.65), cw, Inches(3.35), fill=fill)
-    txt(s, x + Inches(0.3), Inches(1.9), Inches(2), Inches(0.9), num,
-        size=44, color=(BLUE if kind == "done" else SURFACE2), bold=True, font=F_TITLE)
-    status_dot(s, x + cw - Inches(0.4), Inches(2.1), kind=kind, d=Inches(0.22))
-    txt(s, x + Inches(0.3), Inches(2.85), cw - Inches(0.6), Inches(0.7), title,
-        size=19, color=(WHITE if kind == "done" else INK), bold=True, font=F_BODY_SB, line_spacing=1.05)
-    txt(s, x + Inches(0.3), Inches(3.55), cw - Inches(0.6), Inches(1.2), sub,
-        size=13, color=(RGBColor(0xB9, 0xC6, 0xDA) if kind == "done" else MUTED), line_spacing=1.25, font=F_BODY_L)
-txt(s, Inches(0.6), Inches(5.4), Inches(12.1), Inches(1.3),
-    "“Combine two or more models” is the problem statement's own definition of a hybrid — we claim "
-    "credit only for what is built and verified. Model 3 federates our own data with a second, "
-    "real, independently-operated public dataset (not a second Gujarat system); Model 4 "
-    "(state-level central VMS/command centre) stays a documented roadmap, not built this cycle.",
-    size=13.5, color=MUTED, line_spacing=1.3, font=F_BODY_L)
+    rrect(s, x, Inches(1.65), cw, ch, fill=fill)
+    txt(s, x + Inches(0.25), Inches(1.85), Inches(1.8), Inches(0.75), num,
+        size=34, color=(BLUE if kind == "done" else SURFACE2), bold=True, font=F_TITLE)
+    status_dot(s, x + cw - Inches(0.35), Inches(2.0), kind=kind, d=Inches(0.2))
+    txt(s, x + Inches(0.25), Inches(2.7), cw - Inches(0.5), Inches(0.6), title,
+        size=15.5, color=(WHITE if kind == "done" else INK), bold=True, font=F_BODY_SB, line_spacing=1.05)
+    txt(s, x + Inches(0.25), Inches(3.3), cw - Inches(0.5), Inches(1.85), sub,
+        size=10.5, color=(RGBColor(0xB9, 0xC6, 0xDA) if kind == "done" else MUTED), line_spacing=1.2, font=F_BODY_L)
+txt(s, Inches(0.6), Inches(5.45), Inches(12.1), Inches(1.4),
+    "“Combine two or more models” is the problem statement's own definition of a hybrid — credit claimed "
+    "only for what's built and verified. Model 3 federates our own data with a second, real, "
+    "independently-operated public dataset (not a second Gujarat system). Model 4's density/storage-tier/"
+    "central-rollup/ANPR-suitability pilot is tested on master; the full statewide central VMS (Kafka, "
+    "Kubernetes, government-DB integration) remains roadmap, not built this cycle.",
+    size=13, color=MUTED, line_spacing=1.3, font=F_BODY_L)
 
 # ============================================================ 6 — SOLUTION OVERVIEW
 s = content_slide("Solution Overview", "A governance layer that refuses to let inference pass as fact", title_size=24)
@@ -442,7 +448,10 @@ for i, (label, shape) in enumerate(nodes2):
     if i < n2 - 1:
         add_arrow(s, x + nw2, lane_y2 + nh2 // 2, xs2[i + 1], lane_y2 + nh2 // 2, color=GRAY_STATUS, weight=Pt(1.5), dashed=True)
 add_arrow(s, Inches(2.0), lane_y1 + nh + Pt(4), Inches(2.0), lane_y2 - Pt(4), color=GRAY_STATUS, weight=Pt(1.25), dashed=True)
-txt(s, Inches(0.6), Inches(5.5), Inches(12.1), Inches(1.2),
+txt(s, Inches(0.6), Inches(5.2), Inches(12.1), Inches(0.28),
+    "A scoped Model 4 pilot slice — density aggregation, storage tiers, central rollup, ANPR-suitability score — is already tested on master, not this diagram's full regional/central build-out.",
+    size=10.5, color=GREEN, italic=True, font=F_BODY_L)
+txt(s, Inches(0.6), Inches(5.6), Inches(12.1), Inches(1.2),
     "Core principle: centralize metadata, events, identity, and governance — not every raw video frame.\n"
     "80,000 cameras of raw video ≈ 160 Gbps sustained. Structured events instead ≈ 640 Mbps.",
     size=13.5, color=MUTED, line_spacing=1.35, italic=True, font=F_BODY_L)
@@ -618,21 +627,32 @@ bullets(s, Inches(6.85), Inches(4.4), Inches(5.85), Inches(2.2), [
 s = content_slide("Governance", "RBAC and retention enforced in code — not policy-on-paper", title_size=24)
 items = [
     ("Real RBAC", "Genuine 401/403 — not decoration"),
-    ("No face recognition", "Deliberate — DPDP risk + documented bias"),
     ("Purpose-bound audit", "Every query logs user, purpose, case"),
+    # Added 2026-09-19 — both are real code, see analytics/evidence_integrity.py
+    # and api/routes_evidence.py (27 tests). Kept to what is actually
+    # enforced: "verified on export" would overclaim, since the hash is
+    # RECOMPUTED and compared at export, and a mismatch is surfaced rather
+    # than blocking — the claim is detection, not prevention.
+    ("Evidence hash-at-write", "SHA-256 at capture — a later edit shows as a mismatch"),
+    ("§63-oriented export", "Provenance + Part A/B form, CONFIRMED tier only"),
+    ("No face recognition", "Deliberate — DPDP risk + documented bias"),
     ("Data minimization", "No face embeddings, anywhere"),
     ("Enforced retention", "Purges in code, not policy-on-paper"),
     ("Found & fixed", "SSRF gap closed during development"),
 ]
-cw, ch = Inches(3.95), Inches(2.15)
+# 4x2 rather than 3x2: the two evidence-integrity controls above are real
+# now, and a 7-card 3x3 grid would leave two dead slots.
+cw, ch = Inches(2.93), Inches(2.15)
 for i, (title, desc) in enumerate(items):
-    col = i % 3; row = i // 3
-    x = Inches(0.6) + col * (cw + Inches(0.15))
+    col = i % 4; row = i // 4
+    x = Inches(0.6) + col * (cw + Inches(0.13))
     y = Inches(1.7) + row * (ch + Inches(0.2))
     rrect(s, x, y, cw, ch, fill=SURFACE)
-    autoshape(s, MSO_SHAPE.OVAL, x + Inches(0.28), y + Inches(0.3), Inches(0.46), Inches(0.46), fill=BLUE)
-    txt(s, x + Inches(0.95), y + Inches(0.24), cw - Inches(1.2), Inches(0.55), title, size=15, color=INK, bold=True, font=F_BODY_SB, anchor=MSO_ANCHOR.MIDDLE)
-    txt(s, x + Inches(0.28), y + Inches(1.05), cw - Inches(0.56), Inches(0.9), desc, size=12, color=MUTED, line_spacing=1.25, font=F_BODY_L)
+    autoshape(s, MSO_SHAPE.OVAL, x + Inches(0.25), y + Inches(0.26), Inches(0.42), Inches(0.42), fill=BLUE)
+    # Title BELOW the icon, not beside it: at this narrower card width a
+    # side-by-side title only gets ~1.7in and wraps mid-phrase.
+    txt(s, x + Inches(0.25), y + Inches(0.82), cw - Inches(0.5), Inches(0.5), title, size=13.5, color=INK, bold=True, font=F_BODY_SB, line_spacing=1.1)
+    txt(s, x + Inches(0.25), y + Inches(1.35), cw - Inches(0.5), Inches(0.72), desc, size=10.5, color=MUTED, line_spacing=1.2, font=F_BODY_L)
 txt(s, Inches(0.6), Inches(6.35), Inches(12.1), Inches(0.4),
     "DPDP §17 exempts law-enforcement processing — designed as if the Act's substantive obligations apply anyway.",
     size=13, color=MUTED, italic=True, font=F_BODY_L)
@@ -687,7 +707,12 @@ s = content_slide("Evaluation Readiness", "7 of 9 live test-case items done end-
 rows2 = [
     ("Onboard ~50 cameras", "done"), ("Track by plate", "done"), ("Timestamped route", "done"),
     ("Watchlist cross-check", "done"), ("Real-time alert", "done"), ("Continuity w/o plate (LEAD ONLY)", "partial"),
-    ("Real-footage OCR accuracy", "done"), ("§63-oriented evidence export", "gap"), ("Camera ANPR-suitability score", "done"),
+    # §63 export moved gap -> partial 2026-09-19: hash-at-write, the
+    # provenance package and the PDF certificate are built and covered by
+    # 27 tests, but none of it has been run against the real accumulated
+    # pilot DB and there is no UI control yet — "done end-to-end on the
+    # real sandbox" (this slide's own headline) would overclaim it.
+    ("Real-footage OCR accuracy", "done"), ("§63-oriented evidence export", "partial"), ("Camera ANPR-suitability score", "done"),
 ]
 cw, ch = Inches(3.93), Inches(1.2)
 for i, (label, kind) in enumerate(rows2):
@@ -719,7 +744,7 @@ for i, (grp, items) in enumerate(groups2):
 # ============================================================ 18 — HONEST GAPS
 s = content_slide("Honest Gaps", "Stated, not hidden — by design")
 gaps = [
-    "§63 evidence certificate export — not yet built",
+    "§63 export — built & tested, no UI control or legal review yet",
     "Face recognition — deliberate exclusion", "Full 80k-camera physical ingestion",
     "Live ONVIF device validated — mocked-tests only", "WHEP low-latency preview",
     "Appearance-Re-ID accuracy — measured, not fixed", "Road-network routing & pruning",

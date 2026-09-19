@@ -641,10 +641,74 @@ Windows, not yet on the likely-Linux production/demo box.
 - **API keys are stored hashed** (SHA-256), never in plaintext, so a
   database leak doesn't hand out working credentials.
 
+### 9a. Evidence integrity and §63-oriented export (added 2026-09-19)
+
+Electronic evidence is only as good as the provenance travelling with it,
+so each stored detection crop carries an integrity and provenance record
+created **at write time**, not at export time.
+
+- **Hash at capture.** `analytics/evidence_integrity.py` computes the
+  crop's SHA-256 immediately after `cv2.imwrite` returns, and
+  `pipeline.py` persists it with the timestamp it was taken at
+  (`vehicle_event.crop_sha256` / `crop_hashed_at`) in the same commit as
+  the file path. It is never recomputed into that column afterwards. A
+  hash refreshed at export time would prove only that a file matches
+  itself a moment ago — it would say nothing about the bytes between
+  capture and export, which is the entire question.
+- **Verification reports, it does not heal.** `verify_crop()` recomputes
+  the hash of the file as it exists now and compares:
+  `VERIFIED` / `HASH_MISMATCH` / `FILE_MISSING` / `NO_HASH_RECORDED`. A
+  mismatch is surfaced with *both* hashes rather than silently overwriting
+  the stored value. Rows predating this feature report
+  `NO_HASH_RECORDED` — absence of a hash is not evidence of tampering, it
+  means the guarantee was never established, and conflating the two in
+  either direction would be a lie.
+- **Production method is recorded, including the real-vs-stub seam.** The
+  stamp captures the concrete detector / plate-detector / OCR / Re-ID
+  *class names* in force, not just the configured weight filenames: a
+  `StubPlateDetector` and a `YoloPlateDetector` run identically as far as
+  config is concerned and produce completely different artefacts. A
+  package that cannot tell a reviewer which one ran is not a provenance
+  record. `build_rev` comes from `SENTINEL_BUILD_REV` and reads `unknown`
+  when the deployment does not supply it, rather than inventing a version
+  the code cannot verify about itself.
+- **Export is tier-gated, purpose-bound and audited.**
+  `api/routes_evidence.py` serves the package as JSON and as a printable
+  Part A / Part B certificate. Both require investigator+, require a
+  stated purpose, and are gated to `CONFIRMED` via the existing
+  `evidence_class.EXPORTABLE_CLASSES` — `PROBABLE` is refused too, since
+  an export is the point at which a hedge stops being visible. Every
+  export writes an audit row *before* the artefact is produced, so an
+  attempted export is on the record even if rendering fails. The PDF
+  renders the same package the JSON returns rather than recomputing it, so
+  the two cannot disagree about one artefact.
+- **Verification is deliberately not tier-gated.** Checking whether an
+  image was altered is an integrity question, not an evidentiary claim,
+  and an investigator assessing a `LEAD_ONLY` lead is entitled to the
+  answer. Only *export* is restricted.
+
+Status: **AUTOMATED-TEST VERIFIED** — 27 tests, including one that drives
+the real `AnalyticsPipeline` and asserts the stored hash matches an
+independently computed hash of the file on disk, one that edits the file
+after the write and asserts `HASH_MISMATCH`, and seven HTTP-layer tests
+that are the only ones actually exercising the purpose floor and the role
+gate. Not field-verified: never run against the real accumulated
+`sentinel.db`, no frontend control is wired, and the wording is
+"§63-oriented" pending legal review (see §10).
+
 ## 10. Known gaps (stated, not hidden)
 
 - WHEP (low-latency WebRTC live preview) is not implemented — HLS via an
   authenticated backend proxy is the working live-view path.
+- **The §63-oriented evidence export has had no legal review, no UI
+  control, and no run against the real accumulated database.** The
+  mechanism is built and tested (§9a), and the wording throughout is
+  deliberately "§63-oriented" / "prepared to support review under
+  Section 63", never "§63 compliant" or "court admissible". Whether a
+  package produced this way is admissible depends on the operating
+  procedure around the system and on qualified legal counsel — both
+  outside this codebase. The Part A / Part B declarations are printed as
+  blank fields for a human to complete and sign; nothing auto-signs them.
 - ByteTrack (ai fabric bonus criterion) **is now implemented** via
   Ultralytics' built-in tracker (`model.track(..., tracker="bytetrack.yaml")`),
   one persistent instance per camera — verified end-to-end (stable track

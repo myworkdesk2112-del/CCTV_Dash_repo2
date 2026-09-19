@@ -40,6 +40,7 @@ from ..watchlist.service import watchlist_service
 from .anomaly import raise_anomaly_alerts
 from .calibration import calibrated_speed_kmh
 from . import evidence_class as evclass
+from . import evidence_integrity
 from .anpr import PlateReader
 from .attributes import MakeModelClassifier, StubMakeModelClassifier, extract_attributes
 from .detector import VehicleDetector
@@ -279,6 +280,23 @@ class AnalyticsPipeline:
                 session.commit()
 
                 event.crop_path = self._save_crop(event.id, track.best_crop)
+                if event.crop_path:
+                    # Hash the bytes that were just written, before anything
+                    # else can touch the file, and stamp what produced them.
+                    # Deliberately after the write and in the same commit as
+                    # crop_path: a hash stored for a path that failed to
+                    # write would be a provenance record for a file that
+                    # never existed.
+                    absolute_crop = os.path.join(config.CROPS_DIR, event.crop_path)
+                    event.crop_sha256 = evidence_integrity.sha256_file(absolute_crop)
+                    if event.crop_sha256:
+                        event.crop_hashed_at = dt.datetime.utcnow()
+                        event.production_stamp = evidence_integrity.production_stamp(
+                            detector=self._detectors.get(camera_id),
+                            plate_detector=self._plate_detector,
+                            plate_reader=self._plate_reader,
+                            reid_encoder=self._reid_encoder,
+                        )
                 session.commit()
 
                 # Gate on THIS event's own evidence class, not identity.plate:
