@@ -285,17 +285,17 @@ stats = [("7,078", "Cameras already live under\nVISWAS / NETRAM / TRINETRA"), ("
 cw = Inches(2.85)
 for i, (num, label) in enumerate(stats):
     x = Inches(0.6) + i * (cw + Inches(0.15))
-    rrect(s, x, Inches(1.65), cw, Inches(2.0), fill=NAVY)
-    txt(s, x, Inches(1.9), cw, Inches(0.8), num, size=40, color=AMBER if i == 3 else BLUE, bold=True, align=PP_ALIGN.CENTER, font=F_TITLE)
-    txt(s, x + Inches(0.15), Inches(2.7), cw - Inches(0.3), Inches(0.8), label, size=12, color=RGBColor(0xC7, 0xD3, 0xE3), align=PP_ALIGN.CENTER, line_spacing=1.15, font=F_BODY)
-txt(s, Inches(0.6), Inches(4.05), Inches(12.1), Inches(0.4), "Mandatory live test case", size=15, color=NAVY, bold=True, font=F_BODY_SB)
+    rrect(s, x, Inches(1.7), cw, Inches(2.7), fill=NAVY)
+    txt(s, x, Inches(2.05), cw, Inches(0.85), num, size=44, color=AMBER if i == 3 else BLUE, bold=True, align=PP_ALIGN.CENTER, font=F_TITLE)
+    txt(s, x + Inches(0.2), Inches(3.05), cw - Inches(0.4), Inches(1.0), label, size=13, color=RGBColor(0xC7, 0xD3, 0xE3), align=PP_ALIGN.CENTER, line_spacing=1.25, font=F_BODY)
+txt(s, Inches(0.6), Inches(4.85), Inches(12.1), Inches(0.4), "Mandatory live test case", size=16, color=NAVY, bold=True, font=F_BODY_SB)
 chips = ["Onboard ~50 cameras", "Track a plate", "Timestamped route", "Watchlist cross-check", "Real-time alert"]
 cx = Inches(0.6)
 for c in chips:
-    w = Inches(0.55 + 0.087 * len(c))
-    rrect(s, cx, Inches(4.55), w, Inches(0.55), fill=SURFACE, line=LINE, line_w=Pt(1))
-    txt(s, cx, Inches(4.55), w, Inches(0.55), c, size=12.5, color=INK, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, font=F_BODY_SB)
-    cx += w + Inches(0.18)
+    w = Inches(0.6 + 0.095 * len(c))
+    rrect(s, cx, Inches(5.4), w, Inches(0.72), fill=SURFACE, line=LINE, line_w=Pt(1))
+    txt(s, cx, Inches(5.4), w, Inches(0.72), c, size=13.5, color=INK, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE, font=F_BODY_SB)
+    cx += w + Inches(0.2)
 
 # ============================================================ 4 — POSITIONING
 s = content_slide("Positioning", "The accountability layer — not another vehicle-tracking AI")
@@ -423,7 +423,7 @@ for i, (label, shape) in enumerate(nodes1):
     if i < n - 1:
         add_arrow(s, x + nw, lane_y1 + nh // 2, xs[i + 1], lane_y1 + nh // 2, color=BLUE, weight=Pt(2.25))
 
-txt(s, Inches(0.6), Inches(3.35), Inches(5), Inches(0.3), "PRODUCTION ROADMAP — DOCUMENTED, NOT BUILT THIS WEEK", size=11, color=GRAY_STATUS, bold=True, font=F_BODY_SB)
+txt(s, Inches(0.6), Inches(3.35), Inches(6.2), Inches(0.3), "PRODUCTION ROADMAP — CODE SCAFFOLDED, NOT DEPLOYED/VERIFIED", size=11, color=GRAY_STATUS, bold=True, font=F_BODY_SB)
 nodes2 = [("Regional\nMedia Fabric", MSO_SHAPE.CLOUD), ("Kafka\nEvent Bus", MSO_SHAPE.CLOUD), ("Govt DBs\n(query, don't copy)", MSO_SHAPE.CLOUD), ("Governance\nPlane", MSO_SHAPE.CLOUD)]
 n2 = len(nodes2)
 nw2, nh2 = Inches(2.7), Inches(1.0)
@@ -459,15 +459,15 @@ items = [
     ("One clock authority", "Cross-camera timing never assumes NTP-synced legacy cameras"),
     ("Department tagging", "Bulk, manual, and API onboarding, protocol-independent"),
 ]
-cw, ch = Inches(2.93), Inches(2.15)
+cw, ch = Inches(2.93), Inches(2.5)
 for i, (title, desc) in enumerate(items):
     col = i % 4; row = i // 4
     x = Inches(0.6) + col * (cw + Inches(0.13))
-    y = Inches(1.65) + row * (ch + Inches(0.15))
+    y = Inches(1.7) + row * (ch + Inches(0.2))
     rrect(s, x, y, cw, ch, fill=SURFACE)
     rect(s, x, y, cw, Inches(0.07), fill=BLUE)
-    txt(s, x + Inches(0.2), y + Inches(0.24), cw - Inches(0.4), Inches(0.7), title, size=13.5, color=INK, bold=True, font=F_BODY_SB, line_spacing=1.1)
-    txt(s, x + Inches(0.2), y + Inches(0.95), cw - Inches(0.4), Inches(1.1), desc, size=10.5, color=MUTED, line_spacing=1.2, font=F_BODY_L)
+    txt(s, x + Inches(0.2), y + Inches(0.32), cw - Inches(0.4), Inches(0.7), title, size=14, color=INK, bold=True, font=F_BODY_SB, line_spacing=1.1)
+    txt(s, x + Inches(0.2), y + Inches(1.08), cw - Inches(0.4), Inches(1.3), desc, size=11, color=MUTED, line_spacing=1.25, font=F_BODY_L)
 
 # ============================================================ 9 — AI PIPELINE (real diagram)
 s = content_slide("AI Video Analytics", "Plate-first, appearance-second, geo-gated — never one black-box Re-ID model", title_size=21)
@@ -624,16 +624,16 @@ items = [
     ("Enforced retention", "Purges in code, not policy-on-paper"),
     ("Found & fixed", "SSRF gap closed during development"),
 ]
-cw, ch = Inches(3.95), Inches(1.65)
+cw, ch = Inches(3.95), Inches(2.15)
 for i, (title, desc) in enumerate(items):
     col = i % 3; row = i // 3
     x = Inches(0.6) + col * (cw + Inches(0.15))
-    y = Inches(1.65) + row * (ch + Inches(0.15))
+    y = Inches(1.7) + row * (ch + Inches(0.2))
     rrect(s, x, y, cw, ch, fill=SURFACE)
-    autoshape(s, MSO_SHAPE.OVAL, x + Inches(0.25), y + Inches(0.25), Inches(0.42), Inches(0.42), fill=BLUE)
-    txt(s, x + Inches(0.87), y + Inches(0.2), cw - Inches(1.1), Inches(0.5), title, size=14, color=INK, bold=True, font=F_BODY_SB, anchor=MSO_ANCHOR.MIDDLE)
-    txt(s, x + Inches(0.25), y + Inches(0.85), cw - Inches(0.5), Inches(0.7), desc, size=11, color=MUTED, line_spacing=1.2, font=F_BODY_L)
-txt(s, Inches(0.6), Inches(5.35), Inches(12.1), Inches(0.4),
+    autoshape(s, MSO_SHAPE.OVAL, x + Inches(0.28), y + Inches(0.3), Inches(0.46), Inches(0.46), fill=BLUE)
+    txt(s, x + Inches(0.95), y + Inches(0.24), cw - Inches(1.2), Inches(0.55), title, size=15, color=INK, bold=True, font=F_BODY_SB, anchor=MSO_ANCHOR.MIDDLE)
+    txt(s, x + Inches(0.28), y + Inches(1.05), cw - Inches(0.56), Inches(0.9), desc, size=12, color=MUTED, line_spacing=1.25, font=F_BODY_L)
+txt(s, Inches(0.6), Inches(6.35), Inches(12.1), Inches(0.4),
     "DPDP §17 exempts law-enforcement processing — designed as if the Act's substantive obligations apply anyway.",
     size=13, color=MUTED, italic=True, font=F_BODY_L)
 
@@ -689,17 +689,17 @@ rows2 = [
     ("Watchlist cross-check", "done"), ("Real-time alert", "done"), ("Continuity w/o plate (LEAD ONLY)", "partial"),
     ("Real-footage OCR accuracy", "done"), ("§63-oriented evidence export", "gap"), ("Camera ANPR-suitability score", "done"),
 ]
-cw, ch = Inches(3.93), Inches(0.85)
+cw, ch = Inches(3.93), Inches(1.2)
 for i, (label, kind) in enumerate(rows2):
     col = i % 3; row = i // 3
     x = Inches(0.6) + col * (cw + Inches(0.15))
-    y = Inches(1.65) + row * (ch + Inches(0.15))
+    y = Inches(1.7) + row * (ch + Inches(0.2))
     rrect(s, x, y, cw, ch, fill=SURFACE)
-    status_dot(s, x + Inches(0.35), y + ch // 2, kind=kind, d=Inches(0.2))
-    txt(s, x + Inches(0.6), y, cw - Inches(0.8), ch, label, size=13, color=INK, bold=True, anchor=MSO_ANCHOR.MIDDLE, font=F_BODY_SB, line_spacing=1.1)
-txt(s, Inches(0.6), Inches(5.65), Inches(12.1), Inches(0.5),
+    status_dot(s, x + Inches(0.4), y + ch // 2, kind=kind, d=Inches(0.22))
+    txt(s, x + Inches(0.7), y, cw - Inches(0.9), ch, label, size=14, color=INK, bold=True, anchor=MSO_ANCHOR.MIDDLE, font=F_BODY_SB, line_spacing=1.15)
+txt(s, Inches(0.6), Inches(6.35), Inches(12.1), Inches(0.4),
     "Sandbox connectivity fixed & confirmed 2026-09-04 — all 30 real cameras reachable end-to-end.",
-    size=13.5, color=GREEN, bold=True, font=F_BODY_SB)
+    size=14, color=GREEN, bold=True, font=F_BODY_SB)
 
 # ============================================================ 17 — OPERATIONAL BENEFITS
 s = content_slide("Operational Benefits", "Every stakeholder gets less guesswork, not more dashboards", title_size=24)
@@ -714,7 +714,7 @@ for i, (grp, items) in enumerate(groups2):
     rrect(s, x, Inches(1.65), cw, Inches(4.7), fill=SURFACE)
     rect(s, x, Inches(1.65), cw, Inches(0.6), fill=BLUE_DEEP)
     txt(s, x, Inches(1.8), cw, Inches(0.35), grp, size=15, color=WHITE, bold=True, align=PP_ALIGN.CENTER, font=F_BODY_SB)
-    bullets(s, x + Inches(0.3), Inches(2.5), cw - Inches(0.6), Inches(3.6), items, size=13, space_after=18, line_spacing=1.25, font=F_BODY_L)
+    bullets(s, x + Inches(0.3), Inches(2.65), cw - Inches(0.6), Inches(3.5), items, size=14.5, space_after=42, line_spacing=1.3, font=F_BODY_L)
 
 # ============================================================ 18 — HONEST GAPS
 s = content_slide("Honest Gaps", "Stated, not hidden — by design")
@@ -746,16 +746,26 @@ refs = [
     ("Data-protection design posture", "Digital Personal Data Protection Act, 2023 — Section 17"),
     ("UK National ANPR retention precedent", "cited in RESEARCH_EXISTING_SYSTEMS.md §6"),
 ]
-y = Inches(1.7)
-for title, src in refs:
-    rrect(s, Inches(0.6), y, Inches(12.1), Inches(0.62), fill=SURFACE)
-    rect(s, Inches(0.6), y, Inches(0.07), Inches(0.62), fill=BLUE)
-    txt(s, Inches(0.85), y + Inches(0.08), Inches(7.6), Inches(0.48), title, size=12.5, color=INK, bold=True, font=F_BODY_SB, anchor=MSO_ANCHOR.MIDDLE, line_spacing=1.05)
-    txt(s, Inches(8.55), y + Inches(0.08), Inches(4.0), Inches(0.48), src, size=11, color=MUTED, italic=True, font=F_BODY_L, anchor=MSO_ANCHOR.MIDDLE, align=PP_ALIGN.RIGHT, line_spacing=1.05)
-    y += Inches(0.72)
-txt(s, Inches(0.6), y + Inches(0.08), Inches(12.1), Inches(0.4),
+cols_ref = [refs[:3], refs[3:6], refs[6:]]
+col_w = Inches(3.93)
+row_h = Inches(1.32)
+row_gap = Inches(0.18)
+y0 = Inches(1.7)
+for c, col_items in enumerate(cols_ref):
+    x = Inches(0.6) + c * (col_w + Inches(0.15))
+    y = y0
+    for title, src in col_items:
+        rrect(s, x, y, col_w, row_h, fill=SURFACE)
+        rect(s, x, y, Inches(0.07), row_h, fill=BLUE)
+        txt(s, x + Inches(0.28), y + Inches(0.18), col_w - Inches(0.5), Inches(0.9), title,
+            size=13, color=INK, bold=True, font=F_BODY_SB, line_spacing=1.15)
+        txt(s, x + Inches(0.28), y + row_h - Inches(0.42), col_w - Inches(0.5), Inches(0.32), src,
+            size=10.5, color=MUTED, italic=True, font=F_BODY_L)
+        y += row_h + row_gap
+
+txt(s, Inches(0.6), Inches(6.55), Inches(12.1), Inches(0.32),
     "Full citation detail and dated URLs: sentinel-solution/HLD.md and RESEARCH_EXISTING_SYSTEMS.md.",
-    size=11.5, color=MUTED, italic=True, font=F_BODY_L)
+    size=11, color=MUTED, italic=True, font=F_BODY_L)
 
 # ============================================================ 19 — CLOSING
 s = add_slide(); set_bg(s, NAVY_DEEP)
