@@ -11,6 +11,9 @@ export default function VehicleIntelligence({ initialPlate, onResult, onOpenGrap
   const [purpose, setPurpose] = useState("");
   const [caseId, setCaseId] = useState("");
   const [result, setResult] = useState(null);
+  // Purpose/case the displayed result was fetched under — evidence crops are
+  // requested against this, not whatever is typed in the form afterwards.
+  const [resultContext, setResultContext] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -32,6 +35,7 @@ export default function VehicleIntelligence({ initialPlate, onResult, onOpenGrap
       const data = await api.vehicleHistory(plate.trim(), purpose.trim(), caseId.trim() || undefined, { signal: controller.signal });
       if (controller.signal.aborted) return;
       setResult(data);
+      setResultContext({ purpose: purpose.trim(), caseId: caseId.trim() || undefined });
       setSelectedIndex(data.sightings?.length ? data.sightings.length - 1 : null);
       onResult?.(data);
     } catch (err) {
@@ -112,7 +116,7 @@ export default function VehicleIntelligence({ initialPlate, onResult, onOpenGrap
 
           {selected && (
             <>
-              <EvidenceViewer eventId={selected.event_id} hasImage={selected.has_evidence_image} label={`Evidence · ${selected.camera_id}`} />
+              <EvidenceViewer eventId={selected.event_id} hasImage={selected.has_evidence_image} label={`Evidence · ${selected.camera_id}`} purpose={resultContext?.purpose} caseId={resultContext?.caseId} />
               <ExplainabilityPanel sighting={selected} />
             </>
           )}

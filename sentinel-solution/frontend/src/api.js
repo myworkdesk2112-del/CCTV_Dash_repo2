@@ -151,8 +151,14 @@ export const api = {
   // Auth'd image fetch — the session is a cookie, not a header, but an
   // <img src> still can't send credentials by default. Fetch as a blob
   // and hand back an object URL, same shape as before.
-  eventCropBlobUrl: async (eventId) => {
-    const res = await fetch(`${API_BASE}/vehicle/event/${eventId}/crop`, { credentials: "include" });
+  // `purpose`/`caseId` are required by the backend only for a
+  // cross-department crop (it is audited against them); harmless otherwise.
+  eventCropBlobUrl: async (eventId, { purpose, caseId } = {}) => {
+    const params = new URLSearchParams();
+    if (purpose) params.set("purpose", purpose);
+    if (caseId) params.set("case_id", caseId);
+    const qs = params.toString() ? `?${params}` : "";
+    const res = await fetch(`${API_BASE}/vehicle/event/${eventId}/crop${qs}`, { credentials: "include" });
     if (!res.ok) throw new Error(`${res.status}`);
     return URL.createObjectURL(await res.blob());
   },

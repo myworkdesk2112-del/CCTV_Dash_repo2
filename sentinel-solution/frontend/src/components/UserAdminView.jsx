@@ -31,6 +31,10 @@ export default function UserAdminView() {
   async function create(e) {
     e.preventDefault();
     if (!userId.trim()) return;
+    if (role !== "admin" && !department.trim()) {
+      setError("department is required for viewer and investigator keys — a blank department would grant statewide access.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -89,7 +93,7 @@ export default function UserAdminView() {
               <option value="investigator">investigator — search, watchlist, alerts</option>
               <option value="admin">admin — full control, sees raw camera URLs</option>
             </select>
-            <input className="input2" placeholder="department (optional — scopes visible cameras)" value={department} onChange={(e) => setDepartment(e.target.value)} />
+            <input className="input2" placeholder={role === "admin" ? "department (optional for admin)" : "department (required)"} value={department} onChange={(e) => setDepartment(e.target.value)} />
             <button className="btn2" type="submit" disabled={busy || !userId.trim()}>
               {busy ? "Creating…" : "Create key"}
             </button>
