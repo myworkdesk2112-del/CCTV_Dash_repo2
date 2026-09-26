@@ -21,7 +21,7 @@ def test_invalid_role_raises_400(session):
 
 def test_valid_role_creates_key(session):
     admin = Principal("admin1", "admin", None)
-    body = ApiKeyCreate(user_id="u1", role="investigator")
+    body = ApiKeyCreate(user_id="u1", role="investigator", department="Police")
     result = create_api_key(body, session, admin)
     assert result["role"] == "investigator"
     assert result["user_id"] == "u1"

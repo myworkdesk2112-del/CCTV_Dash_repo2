@@ -36,7 +36,7 @@ def _seed_events(session, count, vehicle_type="car"):
 def test_no_truncation_under_200_results(session):
     _seed_events(session, 5)
     investigator = Principal("inv1", "investigator", None)
-    result = search_by_attributes(purpose="stolen_vehicle_investigation", vehicle_type=None,
+    result = search_by_attributes(purpose="stolen_vehicle_investigation", vehicle_type="car",
                                    color=None, partial_plate=None, case_id=None,
                                    db=session, principal=investigator)
     assert result["total_count"] == 5
@@ -47,7 +47,7 @@ def test_no_truncation_under_200_results(session):
 def test_truncation_signalled_and_returns_most_recent(session):
     _seed_events(session, 210)
     investigator = Principal("inv1", "investigator", None)
-    result = search_by_attributes(purpose="stolen_vehicle_investigation", vehicle_type=None,
+    result = search_by_attributes(purpose="stolen_vehicle_investigation", vehicle_type="car",
                                    color=None, partial_plate=None, case_id=None,
                                    db=session, principal=investigator)
     assert result["total_count"] == 210

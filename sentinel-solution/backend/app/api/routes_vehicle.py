@@ -38,6 +38,38 @@ router = APIRouter(prefix="/vehicle", tags=["vehicle"])
 # rejects the trivially-empty case.
 _PURPOSE_MIN_LENGTH = 8
 
+# A partial-plate filter shorter than this matches so much of the table
+# that it is a bulk dump with a filter-shaped fig leaf, not a search.
+_PARTIAL_PLATE_MIN_LENGTH = 3
+
+
+def _audit_cross_department_results(
+    db: Session, principal: Principal, cameras: dict, purpose: str, case_id: str | None, what: str,
+) -> None:
+    """Add an explicit audit row when a department-scoped investigator's
+    search returned sightings from cameras owned by other departments.
+
+    Cross-department vehicle search stays allowed (cross-department
+    tracking is the point of the product, see auth.department_scope), but
+    it must be visible as such in the audit trail rather than hidden inside
+    an ordinary query row (security review 2026-09-26). Admin and unscoped
+    principals are not written here; their per-query row already records
+    them."""
+    department = department_scope(principal)
+    if department is None:
+        return
+    foreign = sorted({(cam.department or "unassigned") for cam in cameras.values() if cam.department != department})
+    if not foreign:
+        return
+    db.add(AuditLog(
+        user_id=principal.user_id,
+        purpose=purpose,
+        case_id=case_id,
+        query=f"cross-department access: {what} returned sightings from dept(s) {', '.join(foreign)} "
+              f"to investigator in dept {department}",
+    ))
+    db.commit()
+
 
 def _cameras_by_id(db: Session, camera_ids) -> dict:
     """Batch-fetch cameras referenced by a set of events into one query,
@@ -176,6 +208,7 @@ def vehicle_history(
         .all()
     )
     cameras = _cameras_by_id(db, (e.camera_id for e in events))
+    _audit_cross_department_results(db, principal, cameras, purpose, case_id, f"history for {plate}")
     out = []
     route_points = []
     for e in events:
@@ -261,10 +294,10 @@ def vehicle_history(
 @router.get("/event/{event_id}/crop")
 def vehicle_event_crop(
     event_id: int,
-    purpose: str = "unspecified",
+    purpose: str | None = None,
     case_id: str | None = None,
     db: Session = Depends(get_db),
-    principal: Principal = Depends(require_role("viewer")),
+    principal: Principal = Depends(require_role("investigator")),
 ):
     """Serves the real evidence crop saved at detection time (see
     analytics/pipeline.py). 404 if this event has none — either it predates
@@ -281,25 +314,28 @@ def vehicle_event_crop(
     export control using `exportable_as_evidence` from /vehicle/recent and
     /vehicle/{plate}/history (see evidence_class.py), which is derived from
     the same event row this endpoint serves, so a LEAD_ONLY crop can be
-    viewed here but the UI never offers to export it as evidence."""
+    viewed here but the UI never offers to export it as evidence.
+
+    Investigator+ only (security review 2026-09-26): a crop is personal
+    data about a vehicle and its occupants, and `viewer` is documented as
+    cameras/GIS/live view only — previously any viewer key, including an
+    unscoped one, could walk integer event ids and pull every crop with no
+    audit row. A cross-department investigator read must state a real
+    purpose (same floor as the plate lookups); own-department reads don't,
+    matching the routine-operations precedent of GET /vehicle/recent."""
     event = db.get(VehicleEvent, event_id)
     if event is None or not event.crop_path:
         raise HTTPException(status_code=404, detail="no evidence image for this event")
 
     camera = db.get(CameraRegistry, event.camera_id)
     department = department_scope(principal)
-    if principal.role == "viewer" and (
-        department is not None and (camera is None or camera.department != department)
-    ):
-        # A viewer must not be able to distinguish another department's crop
-        # from a missing event.
-        raise HTTPException(status_code=404, detail="no evidence image for this event")
-
-    if (
-        principal.role == "investigator"
-        and department is not None
-        and (camera is None or camera.department != department)
-    ):
+    if department is not None and (camera is None or camera.department != department):
+        if purpose is None or len(purpose.strip()) < _PURPOSE_MIN_LENGTH:
+            raise HTTPException(
+                status_code=400,
+                detail=f"cross-department evidence access requires a stated purpose "
+                       f"(at least {_PURPOSE_MIN_LENGTH} characters)",
+            )
         db.add(AuditLog(
             user_id=principal.user_id,
             purpose=purpose,
@@ -378,7 +414,22 @@ def search_by_attributes(
 ):
     """Fallback for when ANPR can't produce a confident plate read on any
     frame: search by colour/type/partial-plate instead — what an
-    investigator actually has when a plate is unreadable in the footage."""
+    investigator actually has when a plate is unreadable in the footage.
+
+    At least one filter is required (security review 2026-09-26): with none,
+    this returned the 200 most recent plates network-wide, a bulk dump that
+    sidestepped the per-plate purpose binding of /vehicle/{plate}/history."""
+    normalized_partial = normalize_plate(partial_plate) if partial_plate else ""
+    if partial_plate and len(normalized_partial) < _PARTIAL_PLATE_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"partial_plate must contain at least {_PARTIAL_PLATE_MIN_LENGTH} letters/digits",
+        )
+    if not (vehicle_type or color or normalized_partial):
+        raise HTTPException(
+            status_code=400,
+            detail="at least one filter (vehicle_type, color or partial_plate) is required",
+        )
     query_desc = f"type={vehicle_type} color={color} partial_plate={partial_plate}"
     db.add(AuditLog(user_id=principal.user_id, purpose=purpose, case_id=case_id, query=query_desc))
     db.commit()
@@ -388,12 +439,13 @@ def search_by_attributes(
         q = q.filter(VehicleEvent.vehicle_type == vehicle_type)
     if color:
         q = q.filter(VehicleEvent.color == color)
-    if partial_plate:
-        q = q.filter(VehicleEvent.plate.like(f"%{normalize_plate(partial_plate)}%"))
+    if normalized_partial:
+        q = q.filter(VehicleEvent.plate.like(f"%{normalized_partial}%"))
     total_count = q.count()
     events = q.order_by(VehicleEvent.observed_at.desc()).limit(200).all()
 
     cameras = _cameras_by_id(db, (e.camera_id for e in events))
+    _audit_cross_department_results(db, principal, cameras, purpose, case_id, f"attribute search ({query_desc})")
     out = []
     for e in events:
         cam = cameras.get(e.camera_id)

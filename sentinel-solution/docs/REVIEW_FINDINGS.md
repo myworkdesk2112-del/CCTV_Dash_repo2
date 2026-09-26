@@ -215,3 +215,44 @@ picked up later (by Codex, another session, or a teammate).
   pass/fail checks). Needs a labeled real-footage sample (even 20-30
   frames) with reported precision/recall.
 ~~`ML-1-full-fix`~~ — **done 2026-09-05**, see Tier 1's `ML-1` entry above.
+
+## 2026-09-26 security review — department-boundary bypasses
+
+A fresh security pass found that department-level scoping could be crossed
+through several side doors. Each of the five below was first reproduced
+against the unfixed route code (in-memory DB, real route functions), then
+fixed. Status: **AUTOMATED-TEST VERIFIED** — `tests/test_security_review_20260926.py`
+(33 tests; 25 of them fail against the pre-fix route files, all pass after),
+plus the updated `test_vehicle_crop_rbac.py`, `test_vehicle_search.py` and
+`test_auth.py`. Not yet exercised against the live sandbox CDN.
+
+- `SEC-26-1` DONE — `/live/{id}/seg?u=` checked only the host, and every
+  sandbox camera shares one CDN host, so a viewer scoped to cam01 could
+  pull another department's cam02 (or any CDN path) through our
+  authenticated session. Now scheme + host + the camera's own directory
+  prefix must match and dot-segments are refused (`routes_stream.py`).
+- `SEC-26-2` DONE — cross-department results from `/vehicle/{plate}/history`
+  and `/vehicle/search-by-attributes` now write an explicit
+  `cross-department access:` audit row naming the other department(s).
+  Attribute search with no filter (previously a 200-plate bulk dump) or a
+  partial plate under 3 characters is refused with 400. A cross-department
+  crop read now requires a stated purpose (8+ chars) instead of silently
+  defaulting to `"unspecified"`.
+- `SEC-26-3` DONE — a department-scoped investigator could acknowledge or
+  dismiss (terminal) another department's alert. Now 404, same as the
+  list view that already hid it (`routes_alerts.py`).
+- `SEC-26-4` DONE — `POST /auth/api-keys` minted an unrestricted key when
+  `department` was left blank. Viewer/investigator keys now require one;
+  only admin may be unscoped. Viewers can no longer fetch evidence crops
+  (investigator+). **Keys minted before this fix with no department keep
+  their unrestricted scope** — audit `GET /auth/api-keys` and re-mint them.
+- `SEC-26-5` DONE — `sentinel.db-wal` / `-shm` / `-journal` added to
+  `.gitignore` (they hold uncheckpointed pilot rows).
+
+Still open from the same review (not fixed): no API-key revocation/expiry;
+watchlist writes have no attribution; the rate limiter can be bypassed by
+rotating junk key headers; the write-time SHA-256 sits in the same mutable
+row as the crop path (detects accidental alteration, not insider tampering
+— there is no HMAC/signature/external anchor); production compose uses
+host networking with the API on `0.0.0.0` over plain HTTP; the backend
+container runs as root.

@@ -27,6 +27,14 @@ def create_api_key(
 ):
     if body.role not in ("admin", "investigator", "viewer"):
         raise HTTPException(400, "role must be one of admin, investigator, viewer")
+    # A non-admin key with no department is unrestricted (see
+    # auth.department_scope), so leaving the field blank used to mint a
+    # statewide-access key by default (security review 2026-09-26).
+    # Unscoped access now has to be an explicit admin grant, not an omission.
+    department = (body.department or "").strip() or None
+    if body.role != "admin" and department is None:
+        raise HTTPException(400, "department is required for viewer and investigator keys")
+    body.department = department
     raw_key = secrets.token_urlsafe(24)
     db.add(ApiKeyEntry(key_hash=hash_key(raw_key), user_id=body.user_id, role=body.role, department=body.department))
     db.commit()

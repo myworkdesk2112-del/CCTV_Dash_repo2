@@ -16,8 +16,9 @@ a password-gated feed playable in a browser at all.
 from __future__ import annotations
 
 import logging
+import posixpath
 import re
-from urllib.parse import quote, urljoin, urlparse
+from urllib.parse import quote, unquote, urljoin, urlparse
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -112,6 +113,28 @@ def hls_playlist(
     )
 
 
+def _is_within_camera_hls_dir(u: str, hls_url: str) -> bool:
+    """True only if `u` points inside this camera's own HLS directory.
+
+    A same-host check alone is not enough: every sandbox camera shares one
+    CDN host, so `/live/cam01/seg?u=https://<cdn>/cam02/index.m3u8` would
+    let a department-scoped viewer who may see cam01 pull cam02's video
+    through our authenticated session (found by security review
+    2026-09-26). Scheme, host and directory prefix must all match, and any
+    dot-segment is refused outright rather than normalised, so
+    `/cam01/../cam02/` cannot climb out of the prefix.
+    """
+    parsed_u = urlparse(u)
+    parsed_cam = urlparse(hls_url)
+    if parsed_u.scheme != parsed_cam.scheme or parsed_u.netloc != parsed_cam.netloc:
+        return False
+    path = unquote(parsed_u.path)
+    if any(segment in (".", "..") for segment in path.split("/")):
+        return False
+    camera_dir = posixpath.dirname(parsed_cam.path).rstrip("/") + "/"
+    return path.startswith(camera_dir)
+
+
 @router.get("/{camera_id}/seg")
 def hls_segment(
     camera_id: str,
@@ -133,9 +156,8 @@ def hls_segment(
     if cam is None:
         raise HTTPException(404, "unknown camera id")
 
-    expected_host = urlparse(cam.hls_url).netloc
-    if urlparse(u).netloc != expected_host:
-        raise HTTPException(400, "segment url host does not match this camera's HLS host")
+    if not _is_within_camera_hls_dir(u, cam.hls_url):
+        raise HTTPException(400, "segment url is outside this camera's HLS directory")
 
     try:
         resp = catalogue.authenticated_get(u)

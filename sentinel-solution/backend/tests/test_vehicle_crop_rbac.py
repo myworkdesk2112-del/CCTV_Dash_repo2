@@ -49,33 +49,35 @@ def _seed_lead_only_event(session, tmp_path, department="Police"):
     return event
 
 
-def test_lead_only_crop_is_viewable_by_own_department_viewer(session, tmp_path):
+def test_lead_only_crop_is_viewable_by_own_department_investigator(session, tmp_path):
     event = _seed_lead_only_event(session, tmp_path, department="Police")
-    viewer = Principal("v1", "viewer", "Police")
+    investigator = Principal("i1", "investigator", "Police")
 
-    result = vehicle_event_crop(event.id, db=session, principal=viewer)
+    result = vehicle_event_crop(event.id, db=session, principal=investigator)
 
     assert isinstance(result, FileResponse)
 
 
 def test_lead_only_crop_is_viewable_with_no_department_scope(session, tmp_path):
-    """Unscoped (department=None) viewer/investigator keys remain
-    unrestricted, matching department_scope's documented contract."""
+    """Unscoped (department=None) investigator keys remain unrestricted,
+    matching department_scope's documented contract. Viewers are refused
+    at the role gate — see test_security_review_20260926.py."""
     event = _seed_lead_only_event(session, tmp_path, department="Police")
-    viewer = Principal("v1", "viewer", None)
+    investigator = Principal("i1", "investigator", None)
 
-    result = vehicle_event_crop(event.id, db=session, principal=viewer)
+    result = vehicle_event_crop(event.id, db=session, principal=investigator)
 
     assert isinstance(result, FileResponse)
 
 
-def test_cross_department_viewer_gets_404_not_export_gated(session, tmp_path):
+def test_cross_department_investigator_without_purpose_is_refused(session, tmp_path):
     event = _seed_lead_only_event(session, tmp_path, department="Police")
-    outside_viewer = Principal("v2", "viewer", "Health")
+    outside_investigator = Principal("i2", "investigator", "Health")
 
     with pytest.raises(HTTPException) as exc_info:
-        vehicle_event_crop(event.id, db=session, principal=outside_viewer)
-    assert exc_info.value.status_code == 404
+        vehicle_event_crop(event.id, db=session, principal=outside_investigator)
+    assert exc_info.value.status_code == 400
+    assert session.query(AuditLog).count() == 0
 
 
 def test_cross_department_investigator_is_allowed_and_audited(session, tmp_path):

@@ -7,6 +7,11 @@ __pycache__/
 *.pyc
 .venv/
 *.db
+# SQLite write-ahead log / shared-memory / rollback journal: these hold
+# uncheckpointed rows from the live pilot DB (events, key hashes, sessions)
+*.db-wal
+*.db-shm
+*.db-journal
 
 # ML model weights — large, auto-downloaded, don't belong in git
 *.pt

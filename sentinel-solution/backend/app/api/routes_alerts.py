@@ -12,7 +12,6 @@ from ..db.models import (
     ALERT_STATUSES,
     ALERT_TRANSITIONS,
     Alert,
-    AuditLog,
     CameraRegistry,
 )
 from .auth import Principal, department_scope, require_role
@@ -63,30 +62,27 @@ def list_alerts(
     return [_serialize(a) for a in alerts]
 
 
-def _audit_cross_department_alert_access(
-    alert: Alert, db: Session, principal: Principal, purpose: str, case_id: str | None,
-) -> None:
-    """Record an investigator's explicit cross-department alert action.
+def _load_alert_scoped(db: Session, alert_id: int, principal: Principal) -> Alert:
+    """Fetch an alert for a state change, refusing other departments' alerts.
 
-    Admin and unscoped keys remain unrestricted.  The alert status update and
-    audit row are committed by the caller in one transaction.
+    Previously a department-scoped investigator could move ANY alert through
+    its lifecycle, including dismissing another department's live stolen-
+    vehicle alert (dismissed is terminal), with `purpose` defaulting to
+    "unspecified" (security review 2026-09-26). Acting on an alert is the
+    owning department's call; admin and unscoped keys remain unrestricted.
+
+    404 rather than 403, matching list_alerts (which already hides these
+    rows) and the registry's non-enumerating boundary.
     """
+    alert = db.get(Alert, alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="alert not found")
     department = department_scope(principal)
-    if principal.role != "investigator" or department is None:
-        return
-    camera = db.get(CameraRegistry, alert.camera_id)
-    if camera is not None and camera.department == department:
-        return
-    db.add(AuditLog(
-        user_id=principal.user_id,
-        purpose=purpose,
-        case_id=case_id,
-        query=(
-            f"cross-department access: alert {alert.id} at camera {alert.camera_id} "
-            f"(dept {camera.department if camera else 'unknown'}) by investigator "
-            f"in dept {department}"
-        ),
-    ))
+    if department is not None:
+        camera = db.get(CameraRegistry, alert.camera_id)
+        if camera is None or camera.department != department:
+            raise HTTPException(status_code=404, detail="alert not found")
+    return alert
 
 
 def _apply_status(alert: Alert, target: str, principal: Principal) -> None:
@@ -117,15 +113,10 @@ class StatusUpdate(BaseModel):
 def update_alert_status(
     alert_id: int,
     body: StatusUpdate,
-    purpose: str = "unspecified",
-    case_id: str | None = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_role("investigator")),
 ):
-    alert = db.get(Alert, alert_id)
-    if alert is None:
-        raise HTTPException(status_code=404, detail="alert not found")
-    _audit_cross_department_alert_access(alert, db, principal, purpose, case_id)
+    alert = _load_alert_scoped(db, alert_id, principal)
     _apply_status(alert, body.status, principal)
     db.commit()
     return _serialize(alert)
@@ -134,21 +125,14 @@ def update_alert_status(
 @router.post("/{alert_id}/ack")
 def acknowledge_alert(
     alert_id: int,
-    purpose: str = "unspecified",
-    case_id: str | None = None,
     db: Session = Depends(get_db),
     principal: Principal = Depends(require_role("investigator")),
 ):
     """Legacy convenience endpoint — kept so existing clients keep working.
     Equivalent to a status transition new -> acknowledged."""
-    alert = db.get(Alert, alert_id)
-    if alert is None:
-        raise HTTPException(status_code=404, detail="alert not found")
-    _audit_cross_department_alert_access(alert, db, principal, purpose, case_id)
+    alert = _load_alert_scoped(db, alert_id, principal)
     # Idempotent: acking an already-advanced alert is a no-op, not a 409.
     if (alert.status or ALERT_STATUS_NEW) == ALERT_STATUS_NEW:
         _apply_status(alert, ALERT_STATUS_ACKNOWLEDGED, principal)
-    # The cross-department audit helper may have added a row even when this
-    # was already acknowledged, so commit unconditionally.
-    db.commit()
+        db.commit()
     return _serialize(alert)
