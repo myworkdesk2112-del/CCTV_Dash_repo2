@@ -34,6 +34,29 @@ evidence-crop transmission, and replica-write traffic, so the real
 achievable reduction in production is likely somewhat less than 250x, not
 more.
 
+**MEASURED, this pilot, 2026-09-28** (`scripts/measure_bandwidth_reduction.py`,
+real timed RTSP captures + real `vehicle_event` rows from the accumulated
+`sentinel.db` — not the assumed figures above): a real 10-second capture
+of 3 real live sandbox cameras averaged **497.4 kbps** actual RTSP
+bitrate — lower than the ~2 Mbps assumption used for the statewide
+projection above, though this is one real sandbox's encoder settings, not
+necessarily representative of departmental camera configurations
+statewide. Against that same pilot's real structured-event traffic — a
+real 108-byte average `vehicle_event` payload at a real measured
+**0.0456 events/sec** on the one live camera with actual traffic history
+— the real measured compression ratio is **~12,624x**, well above the
+250x planning figure above. **Do not use 12,624x as the statewide
+number**: it is inflated by this pilot's genuinely low real traffic
+density (roughly one detected vehicle every 22 seconds); a busy urban
+junction generating closer to the "~1 vehicle/sec peak" figure assumed
+above would show a real ratio much closer to that ~250x planning
+estimate. Treat 640 Mbps/~250x as the operative statewide planning
+number; treat 497.4 kbps and 12,624x as **LIVE/REAL VERIFIED** evidence
+that the underlying architectural principle (structured events cost
+orders of magnitude less than raw video) is real and measured on this
+pilot, not merely assumed. Raw artifact:
+`sentinel-solution/backend/data/bandwidth_measurement/20260928T163729Z.json`.
+
 ## 2. Compute tiers
 
 | Tier | Role | Sizing basis |

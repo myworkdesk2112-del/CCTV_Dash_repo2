@@ -19,12 +19,37 @@ NEVER print/log SENTINEL_ACCESS_TOKEN/EMAIL or any camera's rtsp_url, both
 carry the sandbox password):
 
     set -a && . ../.env && set +a
-    python scripts/real_anpr_scan.py
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python python scripts/real_anpr_scan.py
+
+That env var is only needed if the real trained plate localizer
+(`weights/license-plate-finetune-v1n.onnx`) is present — its onnxruntime
+dependency wants a newer protobuf than paddlepaddle can load natively; see
+requirements-ml.txt's "KNOWN LIVE CONFLICT" note for why. Harmless to set
+unconditionally (falls back to StubPlateDetector without it).
 
 Env knobs (all optional):
     SCAN_CAMERAS               comma-separated camera ids, default = all in catalogue
     SCAN_SECONDS_PER_CAMERA     wall-clock seconds to sample each camera, default 20
     SCAN_MAX_SAVES_PER_CAMERA   cap on saved review images per camera, default 6
+    SCAN_RECONNECT              "true" to reconnect with backoff on a stream drop instead of
+                                 ending that camera's scan early (added for long unattended
+                                 runs, e.g. sampling a full ~12h sandbox loop on one camera —
+                                 HACKATHON_DETAILS.md §13a's own "reconnect with backoff"
+                                 guidance, opt-in so the short default scan's behavior is
+                                 unchanged). Backoff: 2s, doubling, capped at 30s.
+    SCAN_PROGRESS_INTERVAL_S    if set, print a running per-camera status line at this
+                                 interval (seconds) instead of staying silent until the
+                                 camera's scan ends — useful once SCAN_SECONDS_PER_CAMERA is
+                                 hours, not seconds.
+    SCAN_STOP_AFTER_DISTINCT_PLATES  if set, stop that camera's scan as soon as this many
+                                 DISTINCT pattern-valid (and, since 2026-09-26, state-code-
+                                 whitelisted) plate texts have been read, instead of running
+                                 the full SCAN_SECONDS_PER_CAMERA regardless. Distinctness is
+                                 exact-string, on the OCR text as read — plate normalization/
+                                 fuzzy-dedup is deliberately not applied here; this is a raw
+                                 measurement tool, not the real pipeline's identity resolver.
+                                 SCAN_SECONDS_PER_CAMERA still applies as an upper bound in
+                                 case that many distinct plates never turn up.
     SCAN_OUTPUT_DIR             default ./data/anpr_scan/<UTC timestamp>
 """
 from __future__ import annotations
@@ -50,6 +75,9 @@ from app import config
 SCAN_CAMERAS = [c.strip() for c in os.environ.get("SCAN_CAMERAS", "").split(",") if c.strip()]
 SECONDS_PER_CAMERA = float(os.environ.get("SCAN_SECONDS_PER_CAMERA", "20"))
 MAX_SAVES_PER_CAMERA = int(os.environ.get("SCAN_MAX_SAVES_PER_CAMERA", "6"))
+RECONNECT = os.environ.get("SCAN_RECONNECT", "false").lower() == "true"
+PROGRESS_INTERVAL_S = float(os.environ.get("SCAN_PROGRESS_INTERVAL_S", "0")) or None
+STOP_AFTER_DISTINCT_PLATES = int(os.environ.get("SCAN_STOP_AFTER_DISTINCT_PLATES", "0")) or None
 RUN_ID = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 OUTPUT_DIR = os.environ.get("SCAN_OUTPUT_DIR", os.path.join("data", "anpr_scan", RUN_ID))
 
@@ -97,18 +125,55 @@ def scan_camera(camera_id: str, rtsp_url: str, detector, plate_detector, plate_r
     deadline = time.time() + SECONDS_PER_CAMERA
     frame_no = 0
     saves = 0
+    reconnect_backoff_s = 2.0
+    last_progress_at = time.time()
+    distinct_plates: set[str] = set()
 
     try:
         while time.time() < deadline:
+            if cap is None:
+                # Mid-backoff after a failed reconnect attempt (below) —
+                # try again rather than calling .read() on nothing.
+                time.sleep(min(reconnect_backoff_s, 5.0))
+                cap = _open_capture(rtsp_url, connect_timeout_s=5.0)
+                continue
+
             ok, frame = cap.read()
             if not ok:
-                break
+                if not RECONNECT:
+                    break
+                # Expected on a long run: the sandbox's loop point is a hard
+                # scene cut (HACKATHON_DETAILS.md §13.3), and any real network
+                # session can drop. Reconnect with backoff rather than ending
+                # an 11-hour scan after the first hiccup; frame_no/saves are
+                # NOT reset, so this camera's counters stay one continuous
+                # series across the reconnect.
+                print(f"  [{camera_id}] stream ended/dropped — reconnecting "
+                      f"(backoff {reconnect_backoff_s:.0f}s)...", flush=True)
+                cap.release()
+                time.sleep(reconnect_backoff_s)
+                reconnect_backoff_s = min(reconnect_backoff_s * 2, 30.0)
+                cap = _open_capture(rtsp_url)  # may return None; handled at top of loop
+                continue
+            reconnect_backoff_s = 2.0  # reset once a frame arrives again
             frame_no += 1
             result["frames_read"] += 1
+            if PROGRESS_INTERVAL_S and (time.time() - last_progress_at) >= PROGRESS_INTERVAL_S:
+                last_progress_at = time.time()
+                remaining_s = max(0, deadline - time.time())
+                print(
+                    f"  [{camera_id}] progress: frames={result['frames_read']} "
+                    f"vehicles={result['vehicle_detections']} "
+                    f"localized={result['plate_localized']} "
+                    f"read={result['plate_read']} "
+                    f"({remaining_s / 3600:.1f}h remaining)",
+                    flush=True,
+                )
             if frame_no % frame_stride != 0:
                 continue
 
             detections = detector.detect(frame)
+            target_reached = False
             for det in detections:
                 if det.label == "person":
                     continue
@@ -132,8 +197,34 @@ def scan_camera(camera_id: str, rtsp_url: str, detector, plate_detector, plate_r
                     text, conf = read
                     result["plate_read"] += 1
                     result["reads"].append({"text": text, "confidence": conf, "frame_no": frame_no})
+                    is_new = text not in distinct_plates
+                    distinct_plates.add(text)
+                    if is_new:
+                        print(f"  [{camera_id}] distinct plate #{len(distinct_plates)}: "
+                              f"{text} (confidence {conf:.3f}, frame {frame_no})", flush=True)
+                    if STOP_AFTER_DISTINCT_PLATES and len(distinct_plates) >= STOP_AFTER_DISTINCT_PLATES:
+                        target_reached = True
 
-                if saves < MAX_SAVES_PER_CAMERA:
+                # A successful plate read is ALWAYS saved, uncapped — found
+                # 2026-09-26: with a single shared `saves` budget, a run that
+                # hit its cap early (on ordinary vehicle detections, before
+                # any plate was ever read) produced 10 "distinct" reads with
+                # not one saved image to visually confirm any of them
+                # against. MAX_SAVES_PER_CAMERA still caps the *diagnostic*
+                # no-read saves below (false-positive/negative review), but
+                # a real read is exactly the evidence this script exists to
+                # let a human verify, so it must never be crowded out.
+                if read is not None:
+                    tag = f"f{frame_no}_v{result['vehicle_detections']}_READ"
+                    vpath = os.path.join(cam_dir, f"{tag}_vehicle.jpg")
+                    cv2.imwrite(vpath, crop)
+                    saved_entry = {"vehicle_crop": vpath, "plate_crop": None, "ocr_read": read}
+                    if plate_crop is not None and plate_crop.size > 0:
+                        ppath = os.path.join(cam_dir, f"{tag}_platecrop.jpg")
+                        cv2.imwrite(ppath, plate_crop)
+                        saved_entry["plate_crop"] = ppath
+                    result["saved"].append(saved_entry)
+                elif saves < MAX_SAVES_PER_CAMERA:
                     # Save the vehicle crop + (if localized) the plate-region
                     # crop, so a human can check "did the plate ACTUALLY land
                     # in this crop region" independent of whether OCR read it —
@@ -148,8 +239,17 @@ def scan_camera(camera_id: str, rtsp_url: str, detector, plate_detector, plate_r
                         saved_entry["plate_crop"] = ppath
                     result["saved"].append(saved_entry)
                     saves += 1
+
+                if target_reached:
+                    break  # inner for-loop over this frame's detections
+
+            if target_reached:
+                print(f"  [{camera_id}] reached target of {STOP_AFTER_DISTINCT_PLATES} "
+                      f"distinct plate(s) — stopping this camera early.", flush=True)
+                break  # outer while-loop — stop sampling this camera
     finally:
-        cap.release()
+        if cap is not None:
+            cap.release()
 
     return result
 

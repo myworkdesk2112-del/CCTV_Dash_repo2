@@ -137,16 +137,24 @@ the mandatory test case is actually built to surface.
 
 ## 4. Why This Is Deployable in the Real World, Not Just a Demo
 
-- **Real, not synthetic, validation:** a real vehicle's real plate
-  (`GJ01RP6128`) was read correctly on live government sandbox footage —
-  4 of 5 consecutive samples, 0.85–0.92 confidence each — after finding
-  and fixing two real bugs (a plate-localization geometry issue, and a
-  two-line-plate OCR-matching issue) purely from testing against actual
-  camera footage. Verified this isn't just a promising OCR string: ran
-  the actual production consensus-vote logic (`tracker.py`) against these
-  exact votes and confirmed it produces an ACCEPTED read at confidence
-  0.81 — comfortably above the system's 0.5 acceptance floor. This is the
-  live pipeline's real accept-path, not a lab condition.
+- **Real, not synthetic, validation of each pipeline stage:** real YOLOv8
+  vehicle detection, a real trained plate localizer, and real PaddleOCR
+  have each been run against actual live government sandbox footage
+  (not synthetic/composited frames), fixing two real bugs found this way
+  (a plate-localization geometry issue, and a two-line-plate
+  OCR-matching issue). An earlier captured example (`GJ01RP6128`, 4/5
+  samples, confidence 0.81) demonstrated the accept-path once; a fresh
+  sampling pass on 2026-09-26 produced a **new, independently reproduced
+  real read** — `GJ19BR3000`, 6 of 6 consecutive samples, confidence
+  0.917–0.977, visually confirmed against the saved image — after 5
+  earlier attempts that day found no legible plate. **Honest status:**
+  the pipeline is proven working end to end, twice now, on two different
+  vehicles; a given sampling window is not guaranteed to include a close,
+  legible plate (sandbox traffic varies by loop position), so a fresh
+  read is reconfirmed close to demo time rather than assumed permanent.
+  If asked, say plainly that this is a live capability that's been
+  demonstrated repeatedly, not a guarantee that any single sampling
+  attempt will always succeed.
 - **Real-world precedent that this architecture scales:**
   - The **UK's National ANPR Service** consolidated 44 disparate systems
     across 36 police forces and 5 vendors into one central service (BAE

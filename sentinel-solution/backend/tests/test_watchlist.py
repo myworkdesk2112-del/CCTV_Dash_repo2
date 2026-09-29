@@ -20,6 +20,7 @@ from app.db.models import (
     VehicleIdentity,
 )
 from app.analytics import evidence_class as evclass
+from app.analytics.anpr import _best_pattern_match
 from app.watchlist.service import WatchlistService
 
 
@@ -192,3 +193,37 @@ def test_new_alert_allowed_after_dismissing_as_false_positive(session):
 
     assert second is not None
     assert session.query(Alert).count() == 2
+
+
+def test_bh_series_plate_completes_the_whole_watchlist_chain(session):
+    """End-to-end proof for the 2026-09-19 BH-series fix.
+
+    Before the fix this chain was broken in a way that produced no error
+    anywhere: `add()` and the search paths only call `normalize_plate`, which
+    does no format validation, so a BH plate could be watchlisted and searched
+    for quite happily. What could never happen was a BH plate reaching the
+    database in the first place — `PLATE_PATTERN` rejected every OCR read of
+    one — so the alert could never fire and the watchlist entry sat there
+    looking correct and matching nothing.
+
+    This asserts the read gate, the evidence class and the alert together,
+    because the defect was only visible when all three were considered at
+    once. See RESEARCH_ANPR_DEEP_2026-09-19.md §A1.
+    """
+    bh_plate = "23BH1234AA"
+
+    # 1. The OCR gate now admits it — this is the step that used to fail.
+    assert _best_pattern_match(bh_plate) == bh_plate
+
+    # 2. A sighting carrying it is CONFIRMED, exactly like a state plate.
+    event = _seed_event(session, identity_plate=bh_plate, event_plate=bh_plate)
+    assert evclass.classify(event.plate, event.link_method) == evclass.CONFIRMED
+
+    # 3. The alert fires through the real pipeline gating.
+    service = WatchlistService()
+    service.add(session, bh_plate, "stolen vehicle")
+    alert = _raise_like_pipeline(session, service, event)
+
+    assert alert is not None
+    assert alert.plate == bh_plate
+    assert alert.evidence_class == evclass.CONFIRMED

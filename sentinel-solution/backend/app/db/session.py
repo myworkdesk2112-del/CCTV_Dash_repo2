@@ -88,6 +88,14 @@ _ADDITIVE_MIGRATIONS = [
     ("vehicle_event", "crop_sha256", "VARCHAR"),
     ("vehicle_event", "crop_hashed_at", "TIMESTAMP"),
     ("vehicle_event", "production_stamp", "VARCHAR"),
+    ("vehicle_event", "plate_region_w_px", "FLOAT"),
+    ("vehicle_event", "plate_region_h_px", "FLOAT"),
+    ("vehicle_event", "plate_localiser", "VARCHAR"),
+    ("vehicle_event", "plate_ocr_attempts", "INTEGER"),
+    ("vehicle_event", "plate_ocr_reads", "INTEGER"),
+    ("camera_registry", "storage_medium", "VARCHAR"),
+    ("camera_registry", "storage_retention_days", "INTEGER"),
+    ("camera_registry", "storage_capacity_note", "VARCHAR"),
 ]
 
 

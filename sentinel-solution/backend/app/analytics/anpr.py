@@ -12,13 +12,69 @@ it on VehicleEvent.plate_confidence either way.
 from __future__ import annotations
 
 import itertools
+import logging
 import re
 from typing import Optional, Protocol, Tuple
 
 import numpy as np
 
-# Indian vehicle registration format, e.g. "GJ01AB1234"
-PLATE_PATTERN = re.compile(r"[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}")
+logger = logging.getLogger("sentinel.anpr")
+
+# Indian vehicle registration formats. Two are legal and they are
+# structurally incompatible, so the gate is an alternation of both rather
+# than one loosened pattern — widening the state-series regex enough to
+# also admit BH plates would admit a great deal of OCR noise with them.
+
+# State series, e.g. "GJ01AB1234" / "DL1CAB1234".
+_STATE_SERIES = r"[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}"
+_STATE_SERIES_RE = re.compile(_STATE_SERIES)
+
+# RTO state/UT code whitelist — TASKS.md's "State-code whitelist for
+# _STATE_SERIES" item, researched 2026-09-19, implemented 2026-09-26 after
+# a real sandbox misread (`FS11ICO9525` — "FS" is not a real code; the
+# actual plate was `GJ11CO9625`, misread on a blurrier frame) made the gap
+# concrete rather than theoretical.
+#
+# Gathered 2026-09-19 from Wikipedia's "Vehicle registration plates of
+# India" — 28 states + 8 union territories, 36 current codes:
+_CURRENT_STATE_CODES = frozenset({
+    "AN", "AP", "AR", "AS", "BR", "CG", "CH", "DD", "DL", "GA", "GJ", "HP",
+    "HR", "JH", "JK", "KA", "KL", "LA", "LD", "MH", "ML", "MN", "MP", "MZ",
+    "NL", "OD", "PB", "PY", "RJ", "SK", "TG", "TN", "TR", "UK", "UP", "WB",
+})
+# Retired codes that MUST still be accepted: a state/UT rename does not
+# re-register the vehicles already on the road under the old code, so
+# these keep appearing in real traffic for years after the change.
+_RETIRED_STATE_CODES = frozenset({
+    "TS",  # Telangana -> TG, 14 Mar 2024 (~10 years of TS-plated vehicles still on the road)
+    "DN",  # Daman & Diu -> DD, 25 Jan 2020 (merged into Dadra & Nagar Haveli and Daman & Diu)
+    "OR",  # Orissa -> OD (Odisha), 2011
+    "UA",  # Uttaranchal -> UK (Uttarakhand), 2007
+})
+_KNOWN_STATE_CODES = _CURRENT_STATE_CODES | _RETIRED_STATE_CODES
+
+# Bharat (BH) series, e.g. "23BH1234AA" / "25BH0123C". Notified by MoRTH on
+# 26 Aug 2021 (registrations opened 15 Sep 2021) for vehicles that move
+# between states, so these are on the road now and a Gujarat camera will
+# see them.
+#
+# Format is YY-BH-####-XX: two year digits, the literal "BH", a four-digit
+# serial, then ONE OR TWO letters. Critically it *starts with digits*,
+# which is why the state-series pattern above rejects every BH plate
+# outright — found 2026-09-19, see RESEARCH_ANPR_DEEP_2026-09-19.md §A1.
+# The bug was silent and one-directional in a nasty way: a BH plate could
+# still be added to a watchlist and searched for (both paths only call
+# normalize_plate, which does no format validation), so those operations
+# appeared to succeed while never being able to match anything, because no
+# BH plate could ever enter the database.
+#
+# "I" and "O" are excluded from the trailing letters by the registration
+# rules themselves, precisely to avoid confusion with the digits 1 and 0.
+# Encoding that here is not cosmetic: it stops the homoglyph search below
+# from "rescuing" a misread into a plate that could never legally exist.
+_BH_SERIES = r"[0-9]{2}BH[0-9]{4}[A-HJ-NP-Z]{1,2}"
+
+PLATE_PATTERN = re.compile(f"(?:{_STATE_SERIES}|{_BH_SERIES})")
 
 # Common OCR digit/letter homoglyph confusions on small, low-contrast plate
 # crops (found 2026-09-05 against a real two/three-wheeler plate at cam06:
@@ -61,10 +117,43 @@ def _best_pattern_match(candidate: str) -> Optional[str]:
     flipping only one of two ambiguous characters when flipping both would
     look more like a real RTO code). Good enough to gate "is this
     plate-SHAPED at all," not a guarantee of exact character accuracy —
-    that's still what tracker.py's cross-frame consensus voting is for."""
+    that's still what tracker.py's cross-frame consensus voting is for.
+
+    State/UT code whitelist (added 2026-09-26): a state-series match
+    (`_STATE_SERIES`) additionally has to carry a real RTO code — any two
+    letters used to pass (`XQ01AB1234`, `ZZ01AB1234`), which is most of the
+    false-positive surface at the most error-prone character positions.
+    BH-series matches carry no state code and are unaffected. Deliberately
+    NOT silent the way a bare whitelist would be: the same class of defect
+    (an over-tight validator quietly discarding valid plates) caused the
+    BH-series bug fixed 2026-09-05, and a real state/UT code missing from
+    the list here would be exactly that failure again, just for a
+    different population — see the module-level `_KNOWN_STATE_CODES`
+    comment. So a shape-valid state-series candidate whose code isn't
+    recognised is still rejected (a garbage code is still garbage), but
+    the rejection logs the exact code that triggered it, once per call,
+    so a real code missing from the list shows up as an observable signal
+    instead of silently and permanently dropping every plate that starts
+    with it."""
+    unknown_state_code: Optional[str] = None
     for variant in _ambiguous_variants(candidate):
-        if PLATE_PATTERN.fullmatch(variant):
+        if not PLATE_PATTERN.fullmatch(variant):
+            continue
+        state_match = _STATE_SERIES_RE.fullmatch(variant)
+        if state_match is None:
+            return variant  # BH-series — no state code to check
+        code = variant[:2]
+        if code in _KNOWN_STATE_CODES:
             return variant
+        if unknown_state_code is None:
+            unknown_state_code = code
+    if unknown_state_code is not None:
+        logger.warning(
+            "anpr: shape-valid plate rejected — unrecognised state/UT code "
+            "%r (candidate=%r). If this is a real code, add it to "
+            "_KNOWN_STATE_CODES/_RETIRED_STATE_CODES in anpr.py.",
+            unknown_state_code, candidate,
+        )
     return None
 
 

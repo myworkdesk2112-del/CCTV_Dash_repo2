@@ -9,6 +9,7 @@ import LiveNetworkView from "./components/LiveNetworkView";
 import GeoTemporalGraph from "./components/GeoTemporalGraph";
 import VehicleIntelligence from "./components/VehicleIntelligence";
 import CameraNetworkView from "./components/CameraNetworkView";
+import CameraDetailPanel from "./components/CameraDetailPanel";
 import AlertsView from "./components/AlertsView";
 import WatchlistView from "./components/WatchlistView";
 import FederationDashboard from "./components/FederationDashboard";
@@ -30,6 +31,8 @@ import InfrastructureScaleView from "./components/InfrastructureScaleView";
 import StorageRetentionView from "./components/StorageRetentionView";
 import ResilienceDRView from "./components/ResilienceDRView";
 import StatewideReadinessView from "./components/StatewideReadinessView";
+import AnprReadinessView from "./components/AnprReadinessView";
+import EvidenceExportView from "./components/EvidenceExportView";
 import "./App.css";
 
 const CAMERA_POLL_MS = 15000;
@@ -39,6 +42,14 @@ export default function App() {
   const [view, setView] = useState("command");
   const [cameras, setCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState(null);
+  // Separate from selectedCameraId (which only highlights a row/pin): this
+  // actually opens the management modal (maintenance/registration/delete/
+  // audit trail — see CameraDetailPanel.jsx). Found 2026-09-27: the
+  // Registry screen (CameraNetworkView, Model 1's own home) had no path to
+  // this modal at all — only a small "i" icon on the unrelated Live
+  // Network video-wall screen did, so these real, working controls were
+  // effectively unreachable from where a user would actually look for them.
+  const [detailCameraId, setDetailCameraId] = useState(null);
   const [vehicleResult, setVehicleResult] = useState(null);
   const [health, setHealth] = useState(null);
   const [gapAnalysis, setGapAnalysis] = useState(null);
@@ -69,6 +80,11 @@ export default function App() {
   function openCamera(id) {
     setSelectedCameraId(id);
     setView("livemap");
+    setDetailCameraId(id);
+  }
+  function openCameraDetail(id) {
+    setSelectedCameraId(id);
+    setDetailCameraId(id);
   }
 
   return (
@@ -105,7 +121,7 @@ export default function App() {
                 cameras={cameras}
                 gapAnalysis={gapAnalysis}
                 selectedCameraId={selectedCameraId}
-                onSelectCamera={setSelectedCameraId}
+                onSelectCamera={openCameraDetail}
                 gapRefreshToken={gapRefreshToken}
                 onOnboarded={() => setGapRefreshToken((n) => n + 1)}
               />
@@ -144,38 +160,13 @@ export default function App() {
                 onNavigate={setView}
               />
             )}
-            {view === "anpr" && (
-              <NotImplemented
-                title="ANPR Readiness"
-                sub="Whether a camera is physically capable of reading a plate — separate from whether it is online"
-                what="This is the highest-value missing screen. Our own cam01 produced 0 plate reads from 62 correctly-localised plates because the plate patch is roughly 25x16 px, against a requirement of at least 120x20 px that four independent vendors agree on. That is a provable geometric finding about the camera, not a failure of the OCR — but the backend does not yet measure or persist plate pixel dimensions, so there is nothing truthful to display."
-                requires={[
-                  "Persist plate bounding-box width/height per localisation attempt",
-                  "Per-camera OCR yield: localisations attempted vs pattern-valid reads",
-                  "A CAPABLE / MARGINAL / UNSUITABLE classifier over those measures, with stated thresholds",
-                  "A remediation hint (re-angle, zoom, reposition, dedicated ANPR camera)",
-                ]}
-                related={{ view: "health", label: "Camera Health" }}
-                onNavigate={setView}
-              />
-            )}
-            {view === "export" && (
-              <NotImplemented
-                title="Evidence Export"
-                sub="Section 63-oriented evidence package for downstream legal review"
-                what="Since 1 July 2024 electronic evidence in India is governed by Section 63 of the Bharatiya Sakshya Adhiniyam, which requires a dual-signed certificate (custodian and expert) carrying a cryptographic hash of the record and a description of how it was produced. Sentinel stores evidence crops with no hash and does not stamp model or software versions per event, so no such package can honestly be produced yet. Evidence Records shows what is persisted today."
-                requires={[
-                  "SHA-256 computed at write time over the crop and metadata, stored alongside it",
-                  "Model and software version stamped on each event at production time",
-                  "A machine-generated production-method statement",
-                  "A printable certificate with Part A / Part B signature blocks",
-                ]}
-                related={{ view: "evidence", label: "Evidence Records" }}
-                onNavigate={setView}
-              />
-            )}
+            {view === "anpr" && <AnprReadinessView onOpenCamera={openCamera} />}
+            {view === "export" && <EvidenceExportView />}
           </div>
         </div>
+        {detailCameraId && (
+          <CameraDetailPanel cameraId={detailCameraId} onClose={() => setDetailCameraId(null)} />
+        )}
       </div>
     </div>
   );

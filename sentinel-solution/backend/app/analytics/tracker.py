@@ -94,6 +94,17 @@ class Track:
     # ByteTrack already solved the association problem more robustly
     # (Kalman-predicted motion, not just last-frame overlap).
     external_track_id: Optional[int] = None
+    # Per-frame plate-localisation geometry, for camera ANPR-suitability
+    # scoring (analytics/anpr_suitability.py). Every frame on which the
+    # plate detector returned a region contributes one (w, h) pair in
+    # SOURCE-FRAME pixels; frames where localisation failed contribute
+    # nothing at all rather than a zero, because "no region found" is not
+    # a measurement of zero pixels. `plate_ocr_reads` counts the subset of
+    # those attempts that produced a PLATE_PATTERN-valid string, which is
+    # the OCR yield a finalized event's single consensus plate cannot show.
+    plate_regions: List[Tuple[float, float]] = field(default_factory=list)
+    plate_ocr_attempts: int = 0
+    plate_ocr_reads: int = 0
 
     def add_observation(
         self,
@@ -103,6 +114,7 @@ class Track:
         attrs: VehicleAttributes,
         plate_result: Optional[Tuple[str, float]],
         crop: Optional[np.ndarray] = None,
+        plate_region: Optional[Tuple[float, float]] = None,
     ) -> None:
         if self.first_bbox is None:
             self.first_bbox = bbox
@@ -113,8 +125,37 @@ class Track:
             self.best_attrs = attrs
             self.best_attrs_confidence = detection_confidence
             self.best_crop = crop
+        if plate_region is not None:
+            self.plate_regions.append(plate_region)
+            self.plate_ocr_attempts += 1
+            if plate_result:
+                self.plate_ocr_reads += 1
         if plate_result:
             self.plate_reads.append(plate_result)
+
+    def plate_region_median(self) -> Tuple[Optional[float], Optional[float]]:
+        """Median localised plate-region width/height across this track.
+
+        Median, not max: max would report the single closest frame (the
+        vehicle directly under the camera) as though it were the camera's
+        normal framing, which flatters every camera. Median describes what
+        the camera typically offers a plate reader as a vehicle crosses its
+        view, which is the question a suitability score is answering.
+        Width and height are taken independently — they come from the same
+        regions, and a per-axis median is what the vendor thresholds
+        (>=120 px wide, >=20 px character height) are each stated against.
+        """
+        if not self.plate_regions:
+            return None, None
+        widths = sorted(w for w, _ in self.plate_regions)
+        heights = sorted(h for _, h in self.plate_regions)
+        mid = len(widths) // 2
+        if len(widths) % 2:
+            return widths[mid], heights[mid]
+        return (
+            (widths[mid - 1] + widths[mid]) / 2.0,
+            (heights[mid - 1] + heights[mid]) / 2.0,
+        )
 
     def consensus_plate(self) -> Tuple[Optional[str], Optional[float]]:
         """Position-weighted character vote, not exact-string majority vote.
@@ -255,11 +296,12 @@ class CameraTracker:
         plate_result: Optional[Tuple[str, float]],
         crop: Optional[np.ndarray] = None,
         external_track_id: Optional[int] = None,
+        plate_region: Optional[Tuple[float, float]] = None,
     ) -> Track:
         if external_track_id is not None:
             for track in self._active:
                 if track.external_track_id == external_track_id:
-                    track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop)
+                    track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop, plate_region)
                     return track
             # No track owns this external_track_id yet. ByteTrack reports
             # box.id=None on a detection's first frame and only assigns the
@@ -281,7 +323,7 @@ class CameraTracker:
                 and self._appearance_compatible(best_track, crop)
             ):
                 best_track.external_track_id = external_track_id
-                best_track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop)
+                best_track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop, plate_region)
                 return best_track
             # Fall through to create a new track below — genuinely a new
             # ByteTrack id with no matching in-flight track.
@@ -299,7 +341,7 @@ class CameraTracker:
                 and best_iou >= IOU_MATCH_THRESHOLD
                 and self._appearance_compatible(best_track, crop)
             ):
-                best_track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop)
+                best_track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop, plate_region)
                 return best_track
 
         track = Track(
@@ -311,7 +353,7 @@ class CameraTracker:
             external_track_id=external_track_id,
         )
         self._next_id += 1
-        track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop)
+        track.add_observation(bbox, pts_ms, detection_confidence, attrs, plate_result, crop, plate_region)
         self._active.append(track)
         return track
 

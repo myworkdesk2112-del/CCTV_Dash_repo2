@@ -286,47 +286,59 @@ position-weighted) consensus mechanism is the natural next step if more
 time allows, but is a new mechanism, not implemented this pass — flagged
 honestly rather than claimed as done.
 
-**Confirmed end-to-end, 2026-09-05 (third pass, same day): a real,
-correct, high-confidence plate read on live government sandbox footage.**
-Re-ran the full 30-camera scan with both fixes in place (real localizer +
-multi-line/homoglyph OCR matching), 45s/camera. Result: 687 real vehicle
-detections, 76 plate localizations, **7 pattern-valid reads** — all from
-`cam06`. Two real vehicles produced these reads:
-- A car: plate read as `GJ01RP6128` on **4 of 5** consecutive samples
+**2026-09-05 (third pass, same day): a real, correct, high-confidence
+plate read was captured on live government sandbox footage — but see the
+2026-09-26 correction below before citing this.** Re-ran the full
+30-camera scan with both fixes in place (real localizer +
+multi-line/homoglyph OCR matching), 45s/camera. Result at the time: 687
+real vehicle detections, 76 plate localizations, 7 pattern-valid reads —
+all from `cam06`. Two real vehicles produced these reads:
+- A car: plate read as `GJ01RP6128` on 4 of 5 consecutive samples
   (one misread as `GU01RP6128`), confidence 0.85–0.92 each time. The
-  saved vehicle crop shows the plate clearly and legibly — **manually
-  confirmed correct against the actual image, not assumed.**
+  saved vehicle crop showed the plate clearly and legibly at the time.
 - A second vehicle: `GJ32B5405`/`GO32B5400`, split 1-vote-each (the
   known consensus-voting gap, still applies here).
 
-**Verified this isn't just a script result — ran the actual production
-consensus-vote logic** (`tracker.py`'s `Track.consensus_plate()`) against
-the first vehicle's 5 real votes: **`("GJ01RP6128", confidence=0.81)`** —
-comfortably clears `PLATE_MIN_CONFIDENCE=0.5`. This means the live
-running pipeline, processing this exact real vehicle, would accept and
-log the correct plate, not just produce an individually-promising OCR
-string that gets suppressed downstream.
+The captured votes were fed through the actual production consensus-vote
+logic (`tracker.py`'s `Track.consensus_plate()`): `("GJ01RP6128",
+confidence=0.81)`, clearing `PLATE_MIN_CONFIDENCE=0.5`. **That specific
+algorithmic check is still valid and locked in as a regression test**
+(`test_consensus_plate_real_cam06_vehicle_clears_confidence_gate`) — given
+those exact captured votes, the consensus logic correctly accepts them.
 
-**This resolves the government-feed ANPR question directly:** real,
-correct, end-to-end ANPR on live sandbox footage is demonstrated, not
-just plausible. The consensus-voting gap noted above is real but
-narrower than first thought — it affects harder cases (two-line plates
-with more OCR variance), not single-line car plates, which already
-worked correctly through the existing exact-string voting.
+> **2026-09-26 correction, then a fresh real result — read this whole
+> block before citing anything above.** Three fresh real scans against
+> the live sandbox (30 cameras twice, plus a focused 3-minute
+> `cam06`-only pass; 928 real vehicle detections, 497 localization
+> attempts total, using the real trained localizer and real PaddleOCR,
+> not a stub) produced 0 pattern-valid plate reads — the `GJ01RP6128`
+> capture above did not reproduce. Two further scans (5 cameras/60s each,
+> then all 30 cameras/40s each — 2,266 more detections) also came up
+> empty until the very last one: **the 40s/camera 30-camera sweep
+> produced 7 pattern-valid reads, 6 of them the same plate on `cam06`:
+> `GJ19BR3000`, confidence 0.917–0.977 across frames 5–30, visually
+> confirmed against the saved crop
+> (`data/anpr_scan/20260926T150303Z/cam06/f5_v1_platecrop.jpg`) — a
+> clean, legible front plate on a black SUV, not a false positive.**
+> Total across all 6 runs: 3,670 real vehicle detections, 677
+> localization attempts, 7 pattern-valid reads. **Use `GJ19BR3000` as the
+> current real-footage headline, not `GJ01RP6128`** — it is a different
+> vehicle at the same camera, reproduced today rather than three weeks
+> ago. See `docs/hackathon/REQUIREMENTS_COVERAGE.md`'s "ANPR-based
+> metadata generation" row for the full detail of all six runs.
 
-**Final bottom line:** real-footage ANPR is demonstrated working
-end-to-end on live government sandbox footage — a real vehicle's real
-plate (`GJ01RP6128`), read correctly and confidently by the actual
-production pipeline logic, not a lab condition or a synthetic composite.
-This was not simply a camera-placement limitation across the whole
-sandbox — `cam06` is genuinely ANPR-suitable, and a real,
-previously-undiscovered OCR bug (multi-line plates) was compounding the
-localizer problem on it; both are now fixed and independently verified.
-What remains genuinely open is OCR *consistency* on harder cases
-(two-line plates, more character-level OCR variance) via a
-consensus-voting refinement — not a capability gap on the core case the
-mandatory test scenario asks for (tracking a designated vehicle by
-registration number). `EMBEDDING_SIMILARITY_THRESHOLD`/ML-3/ML-4 in
+**Bottom line, corrected:** the ANPR pipeline — real YOLOv8 vehicle
+detection, the real trained plate localizer, real PaddleOCR, pattern
+validation, and the consensus-vote logic — is verified working
+end-to-end on live sandbox footage, reproduced 2026-09-26 (`GJ19BR3000`,
+`cam06`). The earlier `GJ01RP6128` capture (2026-09-05) did not reproduce
+in 5 attempts before this one succeeded, which is worth stating honestly:
+a legible plate read depends on real traffic passing close enough to a
+suitable camera during the sampling window, not a guaranteed per-attempt
+outcome — do not imply every sampling pass will succeed. `cam06`'s ANPR
+suitability itself (close-range, front-facing) is confirmed by both the
+original and this new capture.
+`EMBEDDING_SIMILARITY_THRESHOLD`/ML-3/ML-4 in
 `REVIEW_FINDINGS.md`/`CODEX_HANDOFF_PROMPT.md` remain open for a related
 but distinct reason — no clean same-vehicle real-footage pairs exist yet
 to build a held-out Re-ID evaluation from.
@@ -395,6 +407,35 @@ frame → vehicle detection → plate region → enhancement → OCR
 | Motion attributes (dwell / speed / direction) | Derived from track bbox path over PTS | **Real, verified** — image-plane metrics (px/s, screen-direction), NOT calibrated km/h; enables dwell/wrong-way/stopped-zone filters. Inspired by BriefCam's searchable attributes (`../../docs/strategy/RESEARCH_EXISTING_SYSTEMS.md` §3) |
 | Low-confidence read suppression | Config threshold on fused plate confidence | **Real, verified** — a shaky read is withheld (vehicle still logged anonymously) rather than spawning a false identity/alert. Inspired by Flock (`../../docs/strategy/RESEARCH_EXISTING_SYSTEMS.md` §1) |
 | Geo-temporal route reconstruction | Haversine distance between camera GPS + time-gap → plausibility check; OBSERVED sightings interleaved with honestly-labelled INFERRED camera-less segments (`analytics/geo.py`) | **Real, verified** — the differentiator layer for the "advanced cross-camera correlation" bonus (§10 of the problem statement). Straight-line/lower-bound only; a *high* implied speed flags "not a direct drive" (unmonitored detour / possibly different vehicle). Full road-network (OSM) routing + forward next-camera prediction are documented roadmap, not built — see below |
+
+**Facial Recognition Systems (FRS) — evaluated, deliberately excluded, not
+silently omitted.** The problem statement lists FRS as an example
+technology teams may propose. Sentinel does not build it, for two
+specific, cited reasons rather than a generic privacy objection:
+
+- **Accuracy, cited not assumed.** NIST's FRVT Part 3 demography report
+  (NISTIR 8280) found up to **7,200× variation in false-positive rate**
+  across demographic groups for some algorithms — the error is not
+  uniform, it concentrates. Separately, Delhi Police's own 2018 statement
+  to the Delhi High Court put their deployed FRS system's accuracy at
+  **2%**. Both figures are independently fact-checked citations (see
+  `docs/hackathon/TASKS.md`'s Model 4 module-doc entry), not claims
+  invented for this document.
+- **Legal exposure.** The DPDP Act 2023 exempts law-enforcement processing
+  under §17, but biometric identification at CCTV scale, done wrong,
+  creates the kind of wrongful-identification incident that draws exactly
+  the regulatory and reputational scrutiny a pilot project should not
+  invite before an accuracy/bias evaluation exists.
+
+`analytics/DeliberatelyExcludedFaceRecognizer` is a real code seam — a
+Protocol implementation that raises rather than fabricating a face-match
+result — so the exclusion is enforced in code, not just stated in a
+document; see the Model 4 pilot slice entry in `docs/hackathon/TASKS.md`.
+If a department later mandates FRS with its own validated, bias-audited
+model, the seam is where it would plug in; nothing here should be read as
+"FRS is technically impossible to add," only that it was not responsibly
+buildable in this project's timeline without a validated accuracy/bias
+baseline.
 
 **"ANPR failure ≠ tracking failure"** is the core design principle (see
 STRATEGY.md and `sentinel-solution/README.md`): a vehicle is never dropped
@@ -700,8 +741,21 @@ gate. Not field-verified: never run against the real accumulated
 
 - WHEP (low-latency WebRTC live preview) is not implemented — HLS via an
   authenticated backend proxy is the working live-view path.
-- **The §63-oriented evidence export has had no legal review, no UI
-  control, and no run against the real accumulated database.** The
+- **Camera ANPR-suitability geometry is NULL for every event written
+  before 2026-09-19**, and the plate-region measurement produced by the
+  default `StubPlateDetector` is an *upper bound* on the plate, not the
+  plate: it can prove a camera geometrically incapable of ANPR, but it can
+  never establish that one is capable (`anpr_suitability.py` reports that
+  case as `INCONCLUSIVE`). The ≥120 px width figure the verdict is stated
+  against is a **vendor claim** convergent across four vendors, not a
+  threshold this project measured. Blur, glare, view angle, lens and
+  distance are not measured anywhere and are listed as unmeasured on the
+  screen rather than silently omitted.
+- **The §63-oriented evidence export has had no legal review and no run
+  against the real accumulated database.** A UI control now exists
+  (`EvidenceExportView.jsx`, wired 2026-09-19, exercised over real HTTP:
+  409 for LEAD_ONLY, 422 for a short purpose, a real PDF for CONFIRMED);
+  the legal and real-data gaps are unchanged. The
   mechanism is built and tested (§9a), and the wording throughout is
   deliberately "§63-oriented" / "prepared to support review under
   Section 63", never "§63 compliant" or "court admissible". Whether a
@@ -865,7 +919,69 @@ gate. Not field-verified: never run against the real accumulated
   exactly the kind of new architectural layer out of scope for this
   window (see STRATEGY.md).
 
-## 11. Risk register
+## 11. Technical prerequisites and information required from participating departments
+
+Onboarding a department's cameras into Sentinel does not require replacing
+that department's VMS or granting Sentinel any control over it — this
+section states plainly what is actually needed, since the problem
+statement asks for this explicitly and it was previously implicit rather
+than written down in one place.
+
+**Required from a department, per camera or per camera group:**
+
+- A reachable stream URL and protocol: an RTSP URL (`rtsp://host:port/path`)
+  or, preferably, ONVIF discoverability (Profile S/T) on the department's
+  network segment (§3). If only a proprietary VMS API/SDK is exposed
+  (no direct RTSP/ONVIF), the department needs to confirm whether that
+  API can issue a stream URL or export events — a case-by-case
+  integration, not assumed to exist.
+- Network reachability from wherever the Sentinel ingestion point runs to
+  that camera/VMS — a routed path or an explicitly permitted firewall
+  rule, since Sentinel does not tunnel through NAT/CGNAT on its own.
+- Credentials scoped to viewing/streaming only (least privilege) — not
+  admin/configuration access to the camera or VMS. Sentinel never needs
+  write access to a department's own system.
+- Camera identity and metadata: a stable camera ID, install location
+  (address and, ideally, GPS coordinates — §3's GIS layer and §5's
+  geo-temporal correlation both depend on this being accurate, not
+  inferred), owning department, and camera type (fixed/PTZ/dome).
+- Make/model and resolution, if known — feeds directly into the camera
+  ANPR-suitability scoring (`GET /cameras/anpr-readiness`, §9a) rather
+  than being guessed.
+- For a private/commercial camera (society, mall, business — §3): the
+  same technical fields above, plus the entity's explicit written consent
+  to onboard, since Sentinel enforces purpose-bound, audited access and
+  will not onboard a feed without a named responsible owner.
+- If federation-style correlation with another department's own VMS is
+  desired (Model 3, §1): that VMS's own event/metadata export mechanism
+  (API, webhook, or batch export) — Sentinel's `VMSAdapter` pattern
+  (`analytics/federation.py`) is the integration point, but each adapter
+  is written against a specific real system, not a generic "any VMS"
+  claim.
+
+**Explicitly NOT required from a department:**
+
+- No requirement to migrate off, reconfigure, or expose their existing
+  VMS's storage/recording/playback functions — Sentinel connects
+  alongside, not in place of, per §1/§2's direct-connect principle.
+  Existing systems (VISWAS/NETRAM/TRINETRA or any departmental VMS) keep
+  operating unchanged.
+- No requirement for cloud/internet connectivity if the department's
+  network is on-prem/air-gapped — the ingestion point can be deployed
+  within the department's own network boundary; only the analytics
+  output (structured events, not raw video, per §7) needs to reach the
+  central plane.
+- No requirement to standardize on ONVIF if RTSP is already available —
+  ONVIF is the preferred discovery path (§3) but not mandatory.
+
+**Open, not yet resolved:** legacy-fleet credential rotation across 26
+departments' real cameras (mixed Basic/Digest/proprietary-token auth) is
+not addressed by this pilot, which connects to one sandbox with one
+access token (§10) — a real statewide rollout needs a per-camera/
+per-department credential store with rotation support, not designed or
+built this week.
+
+## 12. Risk register
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|

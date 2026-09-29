@@ -11,8 +11,10 @@ import { clickableProps } from "../a11y";
 //
 // `pending: true` marks a destination whose backend does not exist yet. It
 // renders an honest "not yet implemented" screen rather than being hidden,
-// because a jury asking "where is evidence export?" should get a truthful
-// answer instead of a missing menu entry.
+// because a jury asking "where are investigation cases?" should get a
+// truthful answer instead of a missing menu entry. ANPR Readiness and
+// Evidence Export carried this marker until 2026-09-19 and are now real
+// screens; Investigation Cases is the only remaining placeholder.
 const NAV = [
   { group: "Operations", items: [
     { id: "command", label: "Command Centre", icon: IconGrid },
@@ -29,11 +31,11 @@ const NAV = [
     { id: "network", label: "Camera Registry", icon: IconCamera },
     { id: "health", label: "Camera Health", icon: IconPulse },
     { id: "coverage", label: "Coverage & Gaps", icon: IconMap },
-    { id: "anpr", label: "ANPR Readiness", icon: IconEye, pending: true },
+    { id: "anpr", label: "ANPR Readiness", icon: IconEye },
   ]},
   { group: "Evidence", items: [
     { id: "evidence", label: "Evidence Records", icon: IconEvidence },
-    { id: "export", label: "Evidence Export", icon: IconReport, pending: true },
+    { id: "export", label: "Evidence Export", icon: IconReport },
   ]},
   { group: "Integrations", items: [
     { id: "systems", label: "Connected Systems", icon: IconLayers },

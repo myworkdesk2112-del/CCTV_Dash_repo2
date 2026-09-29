@@ -7,6 +7,13 @@ pydantic==2.9.2
 reportlab==4.2.5
 defusedxml==0.7.1
 
+# Loads sentinel-solution/.env at import time (app/config.py::_load_env_file).
+# Already arrived transitively via uvicorn[standard], but config.py now
+# depends on it directly, and a transitive dep can disappear on any upstream
+# release — pinned here so that cannot silently remove the feed credentials
+# from a working deployment. BSD-3-Clause.
+python-dotenv==1.2.3
+
 # PostgreSQL driver for the production migration target (Model 1,
 # 2026-09-17 — see PRODUCTION_MIGRATION_PLAN.md). Only imported by
 # SQLAlchemy when DATABASE_URL points at postgresql://; the pilot's

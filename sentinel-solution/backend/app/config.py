@@ -5,8 +5,80 @@ Per the Integrator's Guide, HLS and RTSP/WHEP are served from *different*
 hosts: HLS rides the CDN (password-protected, works anywhere); RTSP/WHEP
 carry raw TCP/UDP media that the CDN cannot proxy, so they're served
 directly from the public static IP (or a dedicated non-proxied subdomain).
+
+`.env` is loaded automatically — see `_load_env_file()` below for why that
+is worth doing rather than leaving it to the operator's shell.
 """
+import logging
 import os
+from pathlib import Path
+
+_log = logging.getLogger("sentinel.config")
+
+# Which .env was loaded, if any. Recorded as state rather than relying on the
+# log line below, because config.py is imported BEFORE main.py calls
+# logging.basicConfig() — that INFO record has no handler yet and is
+# discarded, so the log alone cannot tell an operator what happened. /health
+# reports this instead (as a boolean; see main.py for why not the path).
+ENV_FILE_LOADED: "str | None" = None
+
+
+def _load_env_file() -> None:
+    """Load `sentinel-solution/.env` into the process environment.
+
+    Added 2026-09-19 after a real failure: the repo ships a `.env` holding
+    the Control Room feed credentials, but nothing read it — every value
+    below came straight from `os.environ`. Starting the backend without
+    first sourcing the file by hand produced a service that looked
+    completely healthy (`/health` 200, app boots, routes serve) while
+    silently having NO camera access at all, announced only by a WARNING
+    line in the log. A misconfiguration that presents as a healthy system
+    is the expensive kind, and it cost a live debugging session to find.
+
+    Three deliberate properties:
+
+    * `override=False` — a variable already set in the real environment
+      WINS over the file. Running `DATABASE_URL=... python -m app.main` to
+      point at a throwaway DB has to keep working, and an operator's
+      explicit export must never be silently overridden by a checked-out
+      file. (`python-dotenv` defaults to this, but it is stated explicitly
+      because the whole safety of the feature rests on it.)
+    * Located relative to THIS file, not the current working directory, so
+      it behaves the same whether the app is started from `backend/`, from
+      the repo root, or by a service manager with an unrelated cwd.
+    * Never fatal, and never logs a value. A missing `.env` is the normal
+      case for a deployment that configures the environment properly, and
+      the file holds credentials, so only the path is logged.
+    """
+    override_path = os.environ.get("SENTINEL_ENV_FILE")
+    candidates = (
+        [Path(override_path)] if override_path
+        # backend/app/config.py -> backend/app -> backend -> sentinel-solution
+        else [Path(__file__).resolve().parents[2] / ".env",
+              Path(__file__).resolve().parents[1] / ".env"]
+    )
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            from dotenv import load_dotenv  # noqa: PLC0415
+        except ImportError:
+            _log.warning(
+                "%s exists but python-dotenv is not installed — its values were "
+                "NOT loaded. Install it, or export the variables yourself.",
+                candidate,
+            )
+            return
+        load_dotenv(candidate, override=False)
+        global ENV_FILE_LOADED
+        ENV_FILE_LOADED = str(candidate)
+        _log.info("loaded environment file %s", candidate)
+        return
+    if override_path:
+        _log.warning("SENTINEL_ENV_FILE=%s does not exist — nothing loaded.", override_path)
+
+
+_load_env_file()
 
 # CDN host — serves HLS + the camera catalogue, behind the access password
 # issued by the Control Room "Request Feed Access" form.

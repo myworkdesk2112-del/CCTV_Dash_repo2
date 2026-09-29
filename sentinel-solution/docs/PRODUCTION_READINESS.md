@@ -39,6 +39,7 @@ Status vocabulary matches `CLAUDE.md` §26:
 | ML licensing (AGPL-3.0 plate localizer) decision | Not a coding task — still an open procurement/legal decision, unchanged | **NOT IMPLEMENTED** (unchanged) |
 | ML validation (`ML-3`/`ML-4` precision/recall) | Not built this session — needs real labeled data, unchanged | **NOT IMPLEMENTED** (unchanged) |
 | Secrets management | `infra/k8s/secret.example.yaml` documents the interface; explicitly recommends External Secrets Operator / Vault over a bare k8s Secret | **DESIGN TARGET** — no secrets manager wired up, this is a placeholder/interface doc |
+| Govt-DB query integration (VAHAN/SARTHI/eGujCop/CCTNS-AFIS-NAFIS), 2026-09-28 | `backend/app/analytics/govt_db_adapters.py`, `GET /admin/govt-db-status` | **IMPLEMENTED, UNVERIFIED, and cannot go further in this environment** — this is the integration *point* (Protocol interface, fail-closed `GovtDbUnavailable`, per-system status endpoint), not a working integration. Unlike the OIDC/Kafka/pgvector scaffolds above, there is no sandbox or test credential for any of these systems available anywhere — real access requires an actual government-to-government integration agreement, which no amount of code changes. 10 tests, full suite 357/357, HTTP-exercised (`GET /admin/govt-db-status` → 200, all four systems report `configured: false`) |
 | Observability (metrics/tracing) | Not built this session — still open, see below | **NOT IMPLEMENTED** (unchanged) |
 
 ## What was deliberately NOT attempted this session, and why

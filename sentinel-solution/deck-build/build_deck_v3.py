@@ -536,7 +536,7 @@ for i, (tag, title, desc) in enumerate(mech_cards):
 txt(s, Inches(0.6), Inches(5.86), Inches(12.1), Inches(0.28), "Not built: make/model classification — no open-source Indian-market model exists; stated, not faked.",
     size=11.5, color=MUTED, italic=True, font=F_BODY_L)
 txt(s, Inches(0.6), Inches(6.18), Inches(12.1), Inches(0.85),
-    "Real-footage result: a real sandbox vehicle's plate (GJ01RP6128) read correctly and confidently on "
+    "Real-footage result: a real sandbox vehicle's plate (GJ19BR3000) read correctly 6/6 times on "
     "camera cam06, verified through the actual production accept-logic. A single-camera read, stated as "
     "exactly that — not evidence of cross-camera tracking.",
     size=12.5, color=GREEN, bold=True, line_spacing=1.25, font=F_BODY_L)

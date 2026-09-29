@@ -169,7 +169,20 @@ stream_manager = StreamManager(catalogue, on_frame=pipeline.process)
 def _sync_camera_health() -> None:
     """Model 1's 'health monitoring' deliverable: reflect each onboarded
     camera's real connection state (from the RTSP worker, not a stub) into
-    CameraRegistry so /cameras and /cameras/gap-analysis report it."""
+    CameraRegistry so /cameras and /cameras/gap-analysis report it.
+
+    Auto-creates a bare row for a live-but-never-onboarded camera in normal
+    operation (deliberate, 2026-09-10 — see TASKS.md: closes the
+    "empty-looking app" risk when nothing's been onboarded yet, so health
+    monitoring never silently misses a live camera). **Skipped when
+    `config.DEMO_CAMERA_SCOPE` is set** (found 2026-09-27): a scoped demo
+    recording wants `registered_size` to genuinely grow only through real
+    onboarding actions, and auto-creating rows for the scope's own live
+    cameras before anyone onboards them defeats that narrative — the
+    scope's whole purpose is a small, clean, reproducible camera set for
+    exactly this kind of recording, so the tradeoff the 2026-09-10 fix was
+    protecting against (a normal deployment looking empty) doesn't apply
+    here."""
     snapshot = stream_manager.health_snapshot()
     session = SessionLocal()
     try:
@@ -177,6 +190,8 @@ def _sync_camera_health() -> None:
         for cam_id, status in snapshot.items():
             registry = session.get(CameraRegistry, cam_id)
             if registry is None:
+                if config.DEMO_CAMERA_SCOPE is not None:
+                    continue
                 registry = CameraRegistry(id=cam_id)
                 session.add(registry)
             stale = status["last_frame_at"] is None or (now - status["last_frame_at"]) > routes_cameras.HEALTH_STALE_S
@@ -324,6 +339,25 @@ def health():
         # design (basic liveness probe), so it shouldn't hand an anonymous
         # caller the actual camera inventory.
         "active_camera_worker_count": len(stream_manager.active_camera_ids),
+        # Configuration provenance. Added 2026-09-19 after a real incident:
+        # with no feed credentials the service boots, serves every route and
+        # reports "ok" while having zero camera access — the failure is
+        # announced only by a startup WARNING that scrolls away. A
+        # misconfiguration that presents as a healthy system is the
+        # expensive kind, so the two facts that cause it are stated here.
+        #
+        # Booleans, not values or paths: /health is unauthenticated, so it
+        # must not hand an anonymous caller the filesystem layout, let alone
+        # a credential. `feed_credentials_present` says only that both
+        # variables are non-empty — NOT that the CDN accepted them (it may
+        # still answer 403, e.g. during a watch-time cooldown); for that,
+        # read catalogue_size.
+        "config": {
+            "env_file_loaded": config.ENV_FILE_LOADED is not None,
+            "feed_credentials_present": bool(
+                config.SENTINEL_ACCESS_TOKEN and config.SENTINEL_ACCESS_EMAIL
+            ),
+        },
         "analytics_degraded_camera_count": degraded_count,
         "catalogue_size": len(catalogue.cameras),
         # Real class names, not booleans — anything starting with "Stub" is

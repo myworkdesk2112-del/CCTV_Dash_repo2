@@ -6,7 +6,7 @@ import io
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -14,10 +14,11 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sqlalchemy.orm import Session
 
 from .. import config
+from ..analytics import anpr_suitability as anpr_fitness
 from ..analytics.anpr_suitability import anpr_suitability_by_camera
 from ..analytics.calibration import MIN_CALIBRATION_POINTS, CalibrationPoint, compute_homography_json
 from ..catalogue import catalogue
-from ..db.models import CameraAuditLog, CameraRegistry, VehicleEvent
+from ..db.models import Alert, CameraAuditLog, CameraDensityWindow, CameraRegistry, VehicleEvent
 from .auth import Principal, department_scope, require_role
 from .deps import get_db
 
@@ -25,12 +26,20 @@ router = APIRouter(prefix="/cameras", tags=["cameras"])
 
 
 def _registered_cameras(db: Session, principal: Principal | None = None) -> list[CameraRegistry]:
-    """Same recording-only scope as catalogue.py's filter (see config.py's
-    DEMO_CAMERA_SCOPE) — applied here too so a scoped recording doesn't show
-    the rest of this environment's real onboarded cameras as "offline"
-    decoys alongside the demo's actual 5. No-op when unset.
+    """**No longer scope-filtered by `DEMO_CAMERA_SCOPE`** (removed
+    2026-09-27): that filter hid ANY registered camera outside the scope
+    set, with no way to distinguish "a genuine pre-existing decoy from
+    another session" from "a camera someone just deliberately onboarded
+    during this recording" — during a real demo, onboarding `cam01` while
+    scoped to `cam06`-`cam08` silently made it vanish from the registry,
+    gap-analysis, and every KPI, which is a worse failure mode than the
+    stale-decoy problem this filter was meant to solve. `catalogue.py`'s
+    own, separate scope check still limits which cameras show as *live*
+    for a scoped recording — only the registry-visibility side of this
+    was removed. The registry should always show the truth of what has
+    actually been onboarded.
 
-    Also applies department-scoped RBAC (see auth.py's `department_scope`):
+    Applies department-scoped RBAC (see auth.py's `department_scope`):
     a non-admin key tied to a department only sees THAT department's
     registered cameras — cameras with no department set yet (unregistered/
     ungap-analyzed) are excluded from a department-scoped view, since
@@ -39,8 +48,6 @@ def _registered_cameras(db: Session, principal: Principal | None = None) -> list
     unclaimed cameras. `principal=None` (internal callers, e.g. the health-
     sync loop) means unrestricted, same as an admin principal."""
     query = db.query(CameraRegistry)
-    if config.DEMO_CAMERA_SCOPE is not None:
-        query = query.filter(CameraRegistry.id.in_(config.DEMO_CAMERA_SCOPE))
     if principal is not None:
         dept = department_scope(principal)
         if dept is not None:
@@ -89,6 +96,9 @@ def _merged_camera_view(
         "department": registry.department if registry else None,
         "vendor": registry.vendor if registry else None,
         "camera_type": registry.camera_type if registry else None,
+        "storage_medium": registry.storage_medium if registry else None,
+        "storage_retention_days": registry.storage_retention_days if registry else None,
+        "storage_capacity_note": registry.storage_capacity_note if registry else None,
         "latitude": registry.latitude if registry else None,
         "longitude": registry.longitude if registry else None,
         "is_healthy": registry.is_healthy if registry else None,
@@ -221,6 +231,11 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
     onboarded_not_live = sorted(set(registered) - set(live))
     missing_department = sorted(cid for cid, r in registered.items() if not r.department)
     missing_gis = sorted(cid for cid, r in registered.items() if r.latitude is None or r.longitude is None)
+    # Model 1's spec text explicitly lists "storage details" alongside
+    # department/GIS as metadata to onboard (found missing entirely
+    # 2026-09-27) — same "surface the real gap, don't hide it" treatment
+    # as missing_department/missing_gis_coordinates above.
+    missing_storage_details = sorted(cid for cid, r in registered.items() if not r.storage_medium)
     # A camera deliberately taken down for servicing must not read as the
     # same "unexpected failure" signal as a camera that's actually broken
     # (REQUIREMENTS_COVERAGE.md's named Model 1 gap: "maintenance status"
@@ -258,6 +273,7 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
         "onboarded_not_live": onboarded_not_live,
         "missing_department": missing_department,
         "missing_gis_coordinates": missing_gis,
+        "missing_storage_details": missing_storage_details,
         "unhealthy": unhealthy,
         "under_maintenance": under_maintenance,
         "deregistered": deregistered_ids,
@@ -265,6 +281,88 @@ def _compute_gap_analysis(db: Session, principal: Principal) -> dict:
         "ageing": ageing,
         "ageing_threshold_years": config.CAMERA_AGEING_THRESHOLD_YEARS,
         "cameras_by_department": by_department,
+    }
+
+
+@router.get("/anpr-readiness")
+def anpr_readiness(
+    classification: str | None = None,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(require_role("investigator")),
+):
+    """Per-camera ANPR fitness: is this camera physically able to produce a
+    plate read, as distinct from whether its stream is up?
+
+    Deliberately a separate endpoint from `list_cameras`, which already
+    embeds the same per-camera verdict: this one also returns the fleet
+    roll-up, the stated thresholds and their provenance, and the honest
+    statement of what is NOT measured — a classification shown without its
+    threshold is not an auditable finding, and the camera list has no room
+    to carry that.
+
+    Department-scoped exactly like `list_cameras` via `_registered_cameras`.
+    Only REGISTERED cameras appear: a live-but-unonboarded camera carries
+    no department attribution to scope by, and a readiness verdict is a
+    finding about a department's own asset.
+
+    Deregistered cameras are excluded — a decommissioned camera's optics
+    are not an open remediation item — but their historical events stay in
+    the database untouched, as everywhere else in this project.
+    """
+    cameras = [c for c in _registered_cameras(db, principal) if not c.deregistered]
+    scores = anpr_suitability_by_camera(db, [c.id for c in cameras])
+
+    rows = []
+    for cam in sorted(cameras, key=lambda c: c.id):
+        score = scores.get(cam.id, {})
+        rows.append({
+            "camera_id": cam.id,
+            "department": cam.department,
+            "location": cam.location_name,
+            "camera_type": cam.camera_type,
+            "latitude": cam.latitude,
+            "longitude": cam.longitude,
+            # Health is shown alongside on purpose: "streaming fine but
+            # cannot read a plate" is the single most useful cell in this
+            # table, and it is invisible if the two live on separate screens.
+            "is_healthy": cam.is_healthy,
+            "anpr_suitability": score,
+        })
+
+    if classification is not None:
+        wanted = classification.upper()
+        rows = [r for r in rows if (r["anpr_suitability"] or {}).get("classification") == wanted]
+
+    summary = {"CAPABLE": 0, "MARGINAL": 0, "UNSUITABLE": 0}
+    for row in rows:
+        verdict = (row["anpr_suitability"] or {}).get("classification")
+        if verdict in summary:
+            summary[verdict] += 1
+
+    return {
+        "cameras": rows,
+        "summary": summary,
+        "total": len(rows),
+        # Cameras whose verdict rests on too little real data to mean
+        # anything yet. Counted separately from the MARGINAL total it is a
+        # subset of, so "we do not know" is not read as "we measured this
+        # and it was mediocre".
+        "insufficient_sample": sum(
+            1 for r in rows if (r["anpr_suitability"] or {}).get("data_status") == "insufficient_sample"
+        ),
+        "measures_disagree": sum(
+            1 for r in rows if (r["anpr_suitability"] or {}).get("measures_disagree")
+        ),
+        "thresholds": anpr_fitness.thresholds(),
+        "method": (
+            "Two measures per camera, both from persisted real sightings: the "
+            "observed validated-plate rate, and the pixel width the plate "
+            "localiser actually had. Blur, glare, view angle, lens and "
+            "distance are not measured by this deployment and are not "
+            "inferred. Where the configured localiser only bounds the plate "
+            "region rather than locating the plate, geometry can rule ANPR "
+            "out but never confirm it."
+        ),
     }
 
 
@@ -319,6 +417,7 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
         ["Onboarded but not currently live", len(report["onboarded_not_live"])],
         ["Missing department attribution", len(report["missing_department"])],
         ["Missing GIS coordinates", len(report["missing_gis_coordinates"])],
+        ["Missing storage details", len(report["missing_storage_details"])],
         ["Unhealthy", len(report["unhealthy"])],
         ["Under maintenance", len(report["under_maintenance"])],
         ["Deregistered", len(report["deregistered"])],
@@ -357,6 +456,7 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
     _id_list_section("Onboarded but not currently live", report["onboarded_not_live"])
     _id_list_section("Missing department attribution", report["missing_department"])
     _id_list_section("Missing GIS coordinates", report["missing_gis_coordinates"])
+    _id_list_section("Missing storage details", report["missing_storage_details"])
     _id_list_section("Unhealthy", report["unhealthy"])
     _id_list_section("Under maintenance", report["under_maintenance"])
     _id_list_section("Deregistered", report["deregistered"])
@@ -368,17 +468,50 @@ def _render_gap_analysis_pdf(report: dict, principal: Principal) -> bytes:
 
 
 class CameraOnboard(BaseModel):
-    id: str
+    id: str = Field(min_length=1, max_length=128)
     department: str | None = None
     location_name: str | None = None
-    latitude: float | None = None
-    longitude: float | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
     vendor: str | None = None
     camera_type: str | None = None  # PTZ / dome / fixed / bullet, free text
+    storage_medium: str | None = None  # e.g. "local NVR", "cloud", "hybrid"
+    storage_retention_days: int | None = Field(default=None, ge=0)
+    storage_capacity_note: str | None = None
     is_restricted_zone: bool = False
-    expected_direction_deg: float | None = None
+    expected_direction_deg: float | None = Field(default=None, ge=0, lt=360)
     install_date: dt.datetime | None = None
-    coverage_radius_m: float | None = None
+    coverage_radius_m: float | None = Field(default=None, ge=0)
+
+    @field_validator("id")
+    @classmethod
+    def _id_not_blank(cls, value: str) -> str:
+        # Field(min_length=1) alone lets "   " through — it only checks
+        # character count, not that any of them are non-whitespace. A
+        # blank-looking camera id would still primary-key successfully and
+        # would be indistinguishable from a real id in the registry/GIS
+        # list, the export CSV, and every URL path that embeds it.
+        #
+        # Lowercased too (found 2026-09-27): the id is a raw string primary
+        # key with no case-folding anywhere else in the stack, so "cam06"
+        # and "CAM06" would onboard as two distinct registry rows for what
+        # is obviously the same physical camera — a real risk the moment a
+        # manual-entry id and a CSV-derived id disagree only in case.
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("camera id must not be blank/whitespace-only")
+        return stripped.lower()
+
+    @field_validator("install_date")
+    @classmethod
+    def _install_date_not_in_future(cls, value: dt.datetime | None) -> dt.datetime | None:
+        # Feeds the ageing-infrastructure gap-analysis category (age = now
+        # - install_date) and the map's ageing dash-outline — a future date
+        # silently produces a negative age instead of a validation error,
+        # which is a worse failure mode than refusing the write outright.
+        if value is not None and value > dt.datetime.utcnow():
+            raise ValueError("install_date cannot be in the future")
+        return value
 
 
 def _apply_onboard_fields(existing: CameraRegistry, body: CameraOnboard) -> None:
@@ -388,6 +521,9 @@ def _apply_onboard_fields(existing: CameraRegistry, body: CameraOnboard) -> None
     existing.longitude = body.longitude
     existing.vendor = body.vendor
     existing.camera_type = body.camera_type
+    existing.storage_medium = body.storage_medium
+    existing.storage_retention_days = body.storage_retention_days
+    existing.storage_capacity_note = body.storage_capacity_note
     existing.is_restricted_zone = body.is_restricted_zone
     existing.expected_direction_deg = body.expected_direction_deg
     existing.install_date = body.install_date
@@ -419,6 +555,9 @@ def onboard_camera(
     return {"status": "onboarded", "id": body.id}
 
 
+MAX_BULK_ONBOARD_SIZE = 2000  # generous for a real CSV import; bounds one request's transaction/memory footprint
+
+
 @router.post("/bulk")
 def onboard_cameras_bulk(
     bodies: list[CameraOnboard],
@@ -427,6 +566,11 @@ def onboard_cameras_bulk(
 ):
     """Bulk-import deliverable — same upsert semantics as onboard_camera,
     looped in one transaction so a 50-camera CSV-derived import is one call."""
+    if len(bodies) > MAX_BULK_ONBOARD_SIZE:
+        raise HTTPException(
+            400, f"bulk onboard payload too large ({len(bodies)} cameras; "
+                 f"max {MAX_BULK_ONBOARD_SIZE} per request) — split into multiple calls",
+        )
     ids = []
     for body in bodies:
         existing = db.get(CameraRegistry, body.id)
@@ -461,7 +605,7 @@ def camera_audit_log(
         .all()
     )
     return [
-        {"user_id": e.user_id, "action": e.action, "created_at": e.created_at.isoformat()}
+        {"id": e.id, "user_id": e.user_id, "action": e.action, "created_at": e.created_at.isoformat()}
         for e in entries
     ]
 
@@ -577,6 +721,58 @@ def reregister_camera(
     return {"id": camera_id, "deregistered": False}
 
 
+@router.delete("/{camera_id}")
+def delete_camera(
+    camera_id: str,
+    db: Session = Depends(get_db),
+    _admin: Principal = Depends(require_role("admin")),
+):
+    """Hard-removes a camera registry row entirely — for a mistakenly or
+    duplicate-onboarded camera, not for retiring a real one. `deregister`
+    above is the reversible option that keeps the row, its audit trail,
+    and any evidence intact; this is the opposite: irreversible, and it
+    also erases this camera's own onboarding audit history (there is
+    nothing left to attach that history to once the row is gone).
+
+    Refuses (409), never overridable, if this camera_id is referenced by
+    any VehicleEvent or Alert row — real investigative evidence must
+    never be silently orphaned by a registry cleanup. This check exists
+    at the application level because SQLite's foreign-key enforcement is
+    not turned on in this project (see db/session.py) — the database
+    itself would not stop this delete from leaving those rows dangling.
+
+    CameraDensityWindow rows (sampled-frame counts, explicitly not
+    evidence — see its own model docstring) and this camera's own
+    CameraAuditLog rows are deleted along with it; they have no
+    investigative weight on their own once the camera they describe is
+    gone.
+    """
+    registry = db.get(CameraRegistry, camera_id)
+    if registry is None:
+        raise HTTPException(status_code=404, detail=f"camera {camera_id} is not registered")
+
+    evidence_count = (
+        db.query(VehicleEvent).filter_by(camera_id=camera_id).count()
+        + db.query(Alert).filter_by(camera_id=camera_id).count()
+    )
+    if evidence_count:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"camera {camera_id} has {evidence_count} vehicle-event/alert "
+                "row(s) referencing it — cannot hard-delete a camera with real "
+                "evidence attached. Use POST /cameras/{camera_id}/deregister "
+                "instead, which keeps the row and its history intact."
+            ),
+        )
+
+    db.query(CameraDensityWindow).filter_by(camera_id=camera_id).delete()
+    db.query(CameraAuditLog).filter_by(camera_id=camera_id).delete()
+    db.delete(registry)
+    db.commit()
+    return {"id": camera_id, "deleted": True}
+
+
 class CalibrationPointIn(BaseModel):
     image_x: float
     image_y: float
@@ -654,7 +850,9 @@ def export_cameras_csv(
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow([
-        "id", "location", "department", "vendor", "camera_type", "latitude", "longitude",
+        "id", "location", "department", "vendor", "camera_type",
+        "storage_medium", "storage_retention_days", "storage_capacity_note",
+        "latitude", "longitude",
         "is_healthy", "last_seen_live_at", "under_maintenance", "maintenance_reason",
         "deregistered", "deregistered_reason",
         "is_restricted_zone", "expected_direction_deg",
@@ -666,6 +864,7 @@ def export_cameras_csv(
         row = _merged_camera_view(cam_id, registry, live_info, include_raw_urls=False)
         writer.writerow([
             row["id"], row["location"], row["department"], row["vendor"], row["camera_type"],
+            row["storage_medium"], row["storage_retention_days"], row["storage_capacity_note"],
             row["latitude"], row["longitude"], row["is_healthy"], row["last_seen_live_at"],
             row["under_maintenance"], row["maintenance_reason"],
             row["deregistered"], row["deregistered_reason"],

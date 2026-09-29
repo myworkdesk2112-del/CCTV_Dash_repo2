@@ -77,6 +77,21 @@ class CameraRegistry(Base):
     # and rejecting an unrecognized vendor's own classification would be
     # worse than storing it as-is.
     camera_type = Column(String, nullable=True)
+    # Model 1's spec text lists "location, department, camera type,
+    # ownership, connectivity status, storage details" as the metadata to
+    # onboard — storage had no field at all (found 2026-09-27). Free text,
+    # not an enum, same reasoning as camera_type/vendor above: the real
+    # onboarding source (a department's own infrastructure record) isn't
+    # constrained to any fixed vocabulary Sentinel can enumerate in advance.
+    # Nullable and never guessed at: the sandbox catalogue has no storage
+    # information at all, so every one of the 30 real sandbox cameras is
+    # honestly NULL here until a department actually supplies it — same
+    # "don't fabricate what wasn't surveyed" discipline as AREA_COORDS in
+    # scripts/onboard_from_catalogue.py and homography_json's calibration
+    # requirement.
+    storage_medium = Column(String, nullable=True)  # e.g. "local NVR", "cloud", "hybrid"
+    storage_retention_days = Column(Integer, nullable=True)
+    storage_capacity_note = Column(String, nullable=True)  # free text, e.g. "2TB NVR, overwrites at capacity"
     onboarded_at = Column(DateTime, default=dt.datetime.utcnow)
     last_seen_live_at = Column(DateTime, nullable=True)
     # No default: a freshly-onboarded camera hasn't been confirmed live yet,
@@ -282,6 +297,40 @@ class VehicleEvent(Base):
     # thresholds in force at write time. Records the real-vs-stub seam,
     # which config alone cannot show.
     production_stamp = Column(String, nullable=True)
+
+    # ANPR-suitability geometry, captured at finalize time from the plate
+    # localiser's own output (analytics/plate_detector.py) rather than
+    # inferred later from the vehicle bbox. A vehicle box is not a plate
+    # box, so the vehicle's width_px above cannot answer "were there enough
+    # pixels on the plate" — these columns can, and nothing else in the
+    # schema does.
+    #
+    # Units are SOURCE-FRAME pixels: the plate region is located inside a
+    # vehicle crop that is itself a slice of the decoded frame, so crop-space
+    # and frame-space pixel scale are identical (no resampling happens
+    # between them). The enhancement upscale in enhance_plate_crop() is
+    # applied AFTER these are recorded and deliberately not reflected here —
+    # interpolated pixels are not information, and counting them would
+    # inflate every camera's apparent readiness.
+    #
+    # `plate_localiser` records WHICH detector produced the measurement,
+    # because the two seams mean different things: StubPlateDetector returns
+    # a fixed lower-middle region of the vehicle crop, which is an UPPER
+    # BOUND on the real plate (the plate is a subset of that region), while a
+    # trained YoloPlateDetector returns the plate itself. anpr_suitability.py
+    # refuses to promote an upper-bound measurement to CAPABLE for exactly
+    # that reason. NULL on rows written before this feature existed.
+    plate_region_w_px = Column(Float, nullable=True)
+    plate_region_h_px = Column(Float, nullable=True)
+    plate_localiser = Column(String, nullable=True)
+    # Per-track OCR yield: how many sampled frames of this vehicle had a
+    # plate region localised and OCR run on it, and how many of those
+    # returned a PLATE_PATTERN-valid string. The ratio across a camera's
+    # events is the "is the OCR stage actually producing reads here"
+    # measure that a plate/no-plate count on the finalized event cannot
+    # give (consensus voting collapses many frame attempts into one row).
+    plate_ocr_attempts = Column(Integer, nullable=True)
+    plate_ocr_reads = Column(Integer, nullable=True)
 
     camera = relationship("CameraRegistry")
     identity = relationship("VehicleIdentity")

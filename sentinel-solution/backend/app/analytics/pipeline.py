@@ -121,7 +121,7 @@ class AnalyticsPipeline:
                 continue
 
             attrs = extract_attributes(crop, det.label, self._make_model_classifier)
-            plate_result = self._read_plate(crop)
+            plate_result, plate_region = self._read_plate(crop)
 
             tracker.update(
                 bbox=det.bbox,
@@ -132,6 +132,7 @@ class AnalyticsPipeline:
                 plate_result=plate_result,
                 crop=crop,
                 external_track_id=det.track_id,
+                plate_region=plate_region,
             )
 
         self._finalize_tracks(frame.camera_id, tracker.pop_expired(frame.pts_ms))
@@ -157,15 +158,32 @@ class AnalyticsPipeline:
     def _read_plate(self, vehicle_crop):
         """vehicle crop -> locate plate region -> enhance -> OCR. Running
         OCR on the whole vehicle crop (bumper/badges/background) produces
-        far more false positives than localizing the plate region first."""
+        far more false positives than localizing the plate region first.
+
+        Returns `(plate_result, plate_region)`. `plate_region` is the
+        localised region's (width, height) in SOURCE-FRAME pixels, or None
+        when no region was found at all — deliberately distinct from
+        `(0, 0)`, because "the detector found nothing" is not a measurement
+        that the plate was zero pixels wide. The vehicle crop is an
+        unresampled slice of the decoded frame, so its pixel scale IS the
+        frame's; the region is measured BEFORE enhance_plate_crop() upscales
+        it, since interpolated pixels carry no extra plate detail and
+        counting them would inflate every camera's ANPR-suitability score.
+        These feed analytics/anpr_suitability.py via the finalized event.
+        """
         plate_bbox = self._plate_detector.locate(vehicle_crop)
         if plate_bbox is None:
-            return None
+            return None, None
         plate_crop = crop_plate(vehicle_crop, plate_bbox)
         if plate_crop.size == 0:
-            return None
+            return None, None
+        # Measured from the CLIPPED crop, not the raw bbox: crop_plate()
+        # clamps the region to the vehicle crop's bounds, so a detector box
+        # overhanging the edge would otherwise be counted at a width whose
+        # pixels were never actually available to the reader.
+        region = (float(plate_crop.shape[1]), float(plate_crop.shape[0]))
         enhanced = enhance_plate_crop(plate_crop)
-        return self._plate_reader.read(enhanced)
+        return self._plate_reader.read(enhanced), region
 
     def _finalize_tracks(self, camera_id: str, tracks: list[Track]) -> None:
         if not tracks:
@@ -209,6 +227,7 @@ class AnalyticsPipeline:
                     plate, plate_confidence = None, None
 
                 attrs = track.best_attrs
+                plate_region_w, plate_region_h = track.plate_region_median()
                 dwell_time_s, speed_px_per_s, direction_deg = track.motion_attributes()
                 speed_kmh = calibrated_speed_kmh(
                     camera_row.homography_json if camera_row else None,
@@ -275,6 +294,18 @@ class AnalyticsPipeline:
                     speed_kmh=speed_kmh,
                     bbox_x1=track.bbox[0], bbox_y1=track.bbox[1],
                     bbox_x2=track.bbox[2], bbox_y2=track.bbox[3],
+                    # ANPR-suitability geometry and OCR yield for this
+                    # track. `plate_localiser` names the detector that
+                    # produced the measurement so anpr_suitability.py can
+                    # tell an upper-bound heuristic region apart from a
+                    # real model-localised plate — the two support very
+                    # different conclusions and must not be averaged
+                    # together as if they were the same measurement.
+                    plate_region_w_px=plate_region_w,
+                    plate_region_h_px=plate_region_h,
+                    plate_localiser=type(self._plate_detector).__name__,
+                    plate_ocr_attempts=track.plate_ocr_attempts,
+                    plate_ocr_reads=track.plate_ocr_reads,
                 )
                 session.add(event)
                 session.commit()

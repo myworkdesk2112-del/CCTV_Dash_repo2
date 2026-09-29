@@ -101,15 +101,34 @@ pip install -r requirements.txt
 # at startup, no detections/plates ever produced) — the service still runs.
 pip install -r requirements-ml.txt
 
-# Fill in the real sandbox host + access token once granted
+# Fill in the real sandbox host + access token once granted.
+# `app/config.py` loads sentinel-solution/.env automatically at import time
+# (since 2026-09-19) — you do NOT need to export or source anything.
 cp ../.env.example ../.env
-# edit ../.env, then export into the shell, e.g.:
-set SENTINEL_CDN_HOST=cctv.corp8.cloud
-set SENTINEL_STREAM_HOST=103.250.160.189
-set SENTINEL_ACCESS_TOKEN=<password from Control Room "Request Feed Access">
+# then edit ../.env:
+#   SENTINEL_CDN_HOST=cctv.corp8.cloud
+#   SENTINEL_STREAM_HOST=103.250.160.189
+#   SENTINEL_ACCESS_TOKEN=<password from Control Room "Request Feed Access">
+#   SENTINEL_ACCESS_EMAIL=<the email registered with that password>
 
 python -m app.main
 ```
+
+The `.env` is located relative to `app/config.py`, not the current working
+directory, so this behaves the same started from `backend/`, from the repo
+root, or by a service manager. A variable already set in the real
+environment **wins** over the file, so `DATABASE_URL=... python -m app.main`
+still overrides it. Point somewhere else with `SENTINEL_ENV_FILE=/path/.env`.
+
+`GET /health` reports `config.env_file_loaded` and
+`config.feed_credentials_present` (booleans — never the path or the values,
+since /health is unauthenticated). Check them first if the app boots
+healthy but `catalogue_size` is 0: without feed credentials the service
+serves every route and reports `"ok"` while having no camera access at all.
+`feed_credentials_present: true` with `catalogue_size: 0` means the CDN
+rejected the credentials — a 403 with *"watch time limit reached — please
+wait for your cooldown"* is the feed account's watch quota, not a
+misconfiguration, and clears by itself.
 
 **Never `pip install` this project's dependencies into a shared/global
 Python environment** (e.g. an IDE's or agent's own venv) — `ultralytics`

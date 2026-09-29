@@ -64,6 +64,16 @@ async function request(path, options = {}) {
     } catch {
       detail = res.statusText;
     }
+    // FastAPI's `detail` is not always a string. The evidence export gate
+    // answers 409 with a structured object ({error, evidence_class, reason,
+    // exportable_classes}), and 422 validation errors are an array — both
+    // would interpolate as "[object Object]" below and hide the actual
+    // reason. Found by calling the live endpoint, not by reading the code.
+    if (detail && typeof detail === "object") {
+      detail = Array.isArray(detail)
+        ? detail.map((d) => d.msg || JSON.stringify(d)).join("; ")
+        : detail.reason || detail.error || JSON.stringify(detail);
+    }
     if (res.status === 401) throw new Error("401 not signed in — set an API key above");
     if (res.status === 403) throw new Error(`403 your role can't do this (${detail || "insufficient permissions"})`);
     throw new Error(`${res.status} ${detail || ""}`.trim());
@@ -73,7 +83,21 @@ async function request(path, options = {}) {
 
 async function downloadBlob(path, filename) {
   const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
-  if (!res.ok) throw new Error(`${res.status} failed to generate file`);
+  if (!res.ok) {
+    // Surface the server's own reason rather than a bare status. The
+    // evidence certificate route answers 409 with a structured detail
+    // explaining WHY an artefact may not be exported (evidence class),
+    // and "409 failed to generate file" would hide exactly the
+    // explanation the investigator needs.
+    let detail;
+    try {
+      const body = await res.json();
+      detail = typeof body.detail === "string" ? body.detail : body.detail?.reason;
+    } catch {
+      detail = null;
+    }
+    throw new Error(`${res.status} ${detail || "failed to generate file"}`);
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -91,6 +115,25 @@ export const api = {
   whoami: () => request("/auth/whoami"),
   listCameras: () => request("/cameras"),
   getCamera: (id) => request(`/cameras/${id}`),
+  cameraAuditLog: (id) => request(`/cameras/${id}/audit-log`),
+  deleteCamera: (id) => request(`/cameras/${id}`, { method: "DELETE" }),
+  deregisterCamera: (id, reason) =>
+    request(`/cameras/${id}/deregister`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: reason || null }),
+    }),
+  reregisterCamera: (id) => request(`/cameras/${id}/register`, { method: "POST" }),
+  setCameraMaintenance: (id, underMaintenance, reason, until) =>
+    request(`/cameras/${id}/maintenance`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        under_maintenance: underMaintenance,
+        reason: reason || null,
+        until: until || null,
+      }),
+    }),
   gapAnalysis: () => request("/cameras/gap-analysis"),
   downloadGapAnalysisPdf: () => downloadBlob("/cameras/gap-analysis/export.pdf", "sentinel_gap_analysis.pdf"),
   onboardCamera: (camera) =>
@@ -176,6 +219,35 @@ export const api = {
     const params = new URLSearchParams({ limit: String(limit) });
     if (cameraId) params.set("camera_id", cameraId);
     return request(`/vehicle/recent?${params}`);
+  },
+
+  anprReadiness: (classification) => {
+    const params = new URLSearchParams();
+    if (classification) params.set("classification", classification);
+    const qs = params.toString();
+    return request(`/cameras/anpr-readiness${qs ? `?${qs}` : ""}`);
+  },
+
+  // Evidence integrity / §63-oriented export (backend/app/api/routes_evidence.py).
+  // `verify` is deliberately available for any sighting — checking whether a
+  // stored image still matches its write-time hash is an integrity question,
+  // not an evidentiary claim. The two export calls are gated server-side on
+  // evidence class and answer 409 when the sighting is not CONFIRMED; that
+  // refusal is the feature, so callers surface its reason rather than
+  // treating it as a generic failure.
+  verifyEvidence: (eventId) => request(`/evidence/event/${eventId}/verify`),
+  evidencePackage: (eventId, purpose, caseId) => {
+    const params = new URLSearchParams({ purpose });
+    if (caseId) params.set("case_id", caseId);
+    return request(`/evidence/event/${eventId}/package?${params}`);
+  },
+  downloadEvidenceCertificate: (eventId, purpose, caseId) => {
+    const params = new URLSearchParams({ purpose });
+    if (caseId) params.set("case_id", caseId);
+    return downloadBlob(
+      `/evidence/event/${eventId}/certificate.pdf?${params}`,
+      `sentinel_evidence_event_${eventId}.pdf`
+    );
   },
 
   federationCorrelations: () => request("/federation/correlations"),

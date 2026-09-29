@@ -149,6 +149,38 @@ lifecycle + false-positive handling (6).
   across ≥2 cameras: you can feed it instead of the composited scenario, but
   keep the controlled scenario as the reliable take — random footage rarely
   gives a clean cross-camera reappearance in a 3-minute cut.
-- **Government-feed video (Submission #4)** is a *separate* recording and
-  needs live sandbox access + an output report of plates/timestamps — not
-  covered here; blocked until sandbox access is confirmed.
+- **Government-feed video (Submission #4)** is a *separate* recording,
+  see `DEMO_SCRIPT_GOVERNMENT_FEED.md` — no longer externally blocked
+  (re-verified live 2026-09-26), it just hasn't been recorded yet.
+
+---
+
+## Assembling the final cut (if recorded as separate clips per shot)
+
+If each shot above was captured as its own file (`shot1.mp4`,
+`shot2.mp4`, ...), concatenate losslessly with ffmpeg, then caption:
+
+```bash
+cat > concat_list.txt <<'EOF'
+file 'shot1.mp4'
+file 'shot2.mp4'
+file 'shot3.mp4'
+file 'shot4.mp4'
+file 'shot5.mp4'
+file 'shot6.mp4'
+EOF
+
+# Fast path — only if all clips share codec/resolution/framerate:
+ffmpeg -f concat -safe 0 -i concat_list.txt -c copy own_feed_raw.mp4
+
+# Re-encode path — use if clips differ (e.g. mixed recorder output):
+ffmpeg -f concat -safe 0 -i concat_list.txt -c:v libx264 -crf 18 -preset slow \
+  -c:a aac -b:a 192k own_feed_raw.mp4
+
+# Optional caption burn-in from an .srt built from the Narration lines above:
+ffmpeg -i own_feed_raw.mp4 -vf subtitles=captions.srt -c:a copy own_feed_final.mp4
+
+# Confirm it lands in the ~2:45 target before submitting:
+ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 \
+  own_feed_final.mp4
+```

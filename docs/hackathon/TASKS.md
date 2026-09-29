@@ -14,6 +14,188 @@ Cross-check against `REQUIREMENTS_COVERAGE.md` (the authoritative
 deliverable-status matrix) and `sentinel-solution/README.md` ("Known
 issues") before trusting this file if it's more than a day or two old.
 
+## 2026-09-19 — Bharat-series (BH) plate support (done)
+
+Correctness fix against a **mandatory** requirement, found by the ANPR
+research pass (`docs/strategy/RESEARCH_ANPR_DEEP_2026-09-19.md` §A1), not by
+a failing test — nothing was failing, which is the point.
+
+**The defect.** `anpr.py`'s `PLATE_PATTERN` was
+`[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}` — two leading *letters*. The Bharat
+series (MoRTH, notified 26 Aug 2021, registrations open 15 Sep 2021) is
+`YY-BH-####-XX` and **starts with digits**, so every BH plate failed
+validation *and* the homoglyph fallback:
+
+```
+GJ01AB1234   fullmatch=True    via_homoglyph=GJ01AB1234
+23BH1234AA   fullmatch=False   via_homoglyph=None
+```
+
+**Why it was worse than "BH plates don't work".** `PLATE_PATTERN` is
+referenced in exactly one place (`_best_pattern_match`). Every other plate
+path — watchlist `add()`, vehicle search, partial-plate search — calls only
+`normalize_plate()`, which uppercases and strips punctuation and performs **no
+format validation**. So an officer could watchlist a BH plate and search for
+it, both would report success, and neither could ever match anything, because
+no BH plate could reach the database in the first place. Silent, one-
+directional, no error surface anywhere.
+
+**The fix.** `PLATE_PATTERN` is now an alternation of two named components
+rather than one loosened pattern — widening the state-series regex enough to
+admit BH plates would have admitted a lot of OCR noise with them. The public
+name is unchanged on purpose: `evidence_class.py`, `tracker.py` and
+`models.py` all describe "the PLATE_PATTERN gate" and renaming would make
+three comments stale for no benefit.
+
+```
+_STATE_SERIES = [A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{3,4}   (unchanged)
+_BH_SERIES    = [0-9]{2}BH[0-9]{4}[A-HJ-NP-Z]{1,2}
+```
+
+`[A-HJ-NP-Z]` encodes the registration rule that BH trailing letters exclude
+**I** and **O**, which exists precisely to avoid confusion with 1 and 0
+(confirmed against Wikipedia's format table, not assumed from a blog — two
+sources disagreed on whether the tail is one letter or two; it is **one or
+two**). Encoding it is not cosmetic: it stops the homoglyph search from
+"rescuing" a misread into a plate that could never legally exist.
+
+**Verified:** 280/280 backend tests (273 baseline + 7 new), zero regressions.
+The 7 cover both tail lengths, state-series non-regression, I/O rejection,
+seven near-miss rejections (wrong year length, wrong serial length, no tail,
+three-letter tail, missing BH literal), homoglyph *recovery* of a BH misread,
+and homoglyph *refusal* to invent an illegal I/O plate.
+
+Runtime-verified beyond unit tests: drove the **real `AnalyticsPipeline`**
+against a throwaway DB with a reader that runs raw OCR text through the same
+gate `PaddleOcrPlateReader` uses. Raw misread `Z3BH1Z34AA` (2 read as Z,
+twice) was recovered to `23BH1234AA`, persisted with `evidence_class=CONFIRMED`,
+and **raised a real watchlist alert** — the complete chain that was previously
+impossible. Plus an end-to-end test in `test_watchlist.py` asserting gate +
+evidence class + alert together, because the defect was only visible when all
+three were considered at once.
+
+**No API, DB, migration, config or dependency change.** Read-path only and not
+retroactive: existing rows are untouched, consistent with the append-only
+evidence stance (CLAUDE.md §24.4). A BH sighting recorded before today stayed
+anonymous and stays anonymous.
+
+**Known residual risk, pinned by a test rather than left incidental:** widening
+the gate also widens what the homoglyph search can rescue. Bounded by the
+existing 4-flip cap, `PLATE_MIN_CONFIDENCE`, and the narrowness of the BH
+shape.
+
+**Deliberately NOT done** (separate tasks, see the research doc §H):
+positional digit-vs-letter homoglyph resolution — the limitation
+`_best_pattern_match`'s own docstring already confesses — and plate-failure
+attribution (`CAMERA_UNFIT` / `PLATE_UNREADABLE`). Bundling either into a bug
+fix would make a regression ambiguous between two causes (CLAUDE.md §23.3).
+
+## 2026-09-19 — ANPR Readiness screen + Evidence Export screen (done)
+
+Closes `CLAUDE.md` §6 Priority C / §21 P1 #8, and wires §21 P1 #6–7's
+already-built backend to a screen. Both were sitting behind the honest
+`NotImplemented` placeholders added 2026-09-12; the Evidence Export
+placeholder had additionally gone **stale and false** — it still read
+"Sentinel stores evidence crops with no hash and does not stamp model or
+software versions per event", which the 6efd22a commit had made untrue the
+same day. That is exactly the organizer-facing drift `CLAUDE.md` §26 exists
+to prevent, and it is fixed here.
+
+### ANPR Readiness (new capability, backend + frontend)
+
+The question is "can this camera physically produce a plate read", which is
+NOT the question Camera Health answers. `cam01` streams perfectly and has
+never read a plate.
+
+- **5 additive columns** on `vehicle_event` through the existing
+  `session.py` mechanism: `plate_region_w_px`, `plate_region_h_px`,
+  `plate_localiser`, `plate_ocr_attempts`, `plate_ocr_reads`.
+- **`pipeline.py::_read_plate` now returns `(plate_result, region)`** —
+  the localised plate region's width/height in **source-frame** pixels,
+  measured from the *clipped* crop and **before** `enhance_plate_crop()`
+  upscales it. Interpolated pixels are not plate detail; counting them
+  would inflate every camera's score. "No region found" stays `None`, not
+  `(0, 0)` — a failed localisation is not a measurement of zero.
+- **`tracker.py`** accumulates per-frame regions and returns their
+  **median** per track (max would report the one vehicle that passed
+  directly under the camera as the camera's normal framing).
+- **`anpr_suitability.py` rewritten** around two independent measures:
+  observed validated-plate rate, and plate-pixel geometry against the
+  **≥120 px / 100 px floor** vendor figures recorded in
+  `DECISION_REVIEW_2026-09-11.md` §H (Eocortex/Bosch/Axis/Plate
+  Recognizer). Labelled VENDOR CLAIM in the API, not presented as a
+  Sentinel measurement.
+- **The epistemics are the feature.** `StubPlateDetector` returns a
+  heuristic region that *contains* the plate, so its measurement is an
+  **upper bound**: below the floor it is a genuine proof of incapability;
+  above the threshold it proves nothing and is reported `INCONCLUSIVE`
+  rather than promoted to CAPABLE. Only a model-localised plate
+  (`YoloPlateDetector`) can support CAPABLE geometry.
+- **Observation beats inference** (`CLAUDE.md` §4.3/§24.6): a camera
+  demonstrably reading plates at ≥60% is CAPABLE regardless of what the
+  geometric estimate says, and the disagreement is surfaced
+  (`measures_disagree`) rather than silently resolved either way.
+- **Character height stays in `unmeasured_factors`** even though region
+  height is now recorded — the vendor threshold is stated against
+  *character* height, and a two/three-line Indian plate carries the same
+  characters at roughly half the per-line height. Conflating the two would
+  be a fabricated measurement. Blur, glare, view angle, lens and distance
+  remain unmeasured and are listed as such on the screen.
+- **`GET /cameras/anpr-readiness`** (investigator+, department-scoped,
+  excludes deregistered) returns per-camera verdicts, the fleet roll-up,
+  the thresholds **and their provenance**, and the honest "not measured"
+  list. `insufficient_sample` is counted separately from the MARGINAL
+  total it is a subset of, so "we do not know" is not read as "we measured
+  it and it was mediocre".
+- **`AnprReadinessView.jsx`** shows ANPR verdict *beside* stream health —
+  the "streaming fine, cannot read a plate" row is the whole point, and it
+  is invisible when the two live on separate screens. Every verdict expands
+  to its two reasons, the measurement basis, the frame-level OCR yield, and
+  the remediation.
+
+### Evidence Export (frontend wiring of existing backend)
+
+`EvidenceExportView.jsx` against the existing `/evidence/event/{id}/verify`
+(any class), `/package` and `/certificate.pdf`. Export buttons disable for a
+non-CONFIRMED sighting **as a courtesy only** — the server's 409 gate is the
+control, and the screen says so. `NO_HASH_RECORDED` is rendered neutrally,
+not as a failure: the guarantee was never established, which is a different
+statement from "these bytes changed".
+
+**Verified:** 266/266 backend tests (249 baseline + 17 new), zero
+regressions. Runtime, not just unit:
+
+- Drove the **real `AnalyticsPipeline`** over synthetic frames against a
+  throwaway DB — a 90 px-wide vehicle produced a stored 54×28 px region,
+  `localiser=StubPlateDetector`, 6 OCR attempts / 0 reads, and the scorer
+  independently reached UNSUITABLE with the geometric reason. With only one
+  sighting the read-rate measure correctly **abstained** while geometry
+  alone reached a verdict — the cam01 case exactly.
+- Exercised every endpoint over real HTTP against a running `app.main`:
+  readiness returned a `healthy=True` + `UNSUITABLE` camera alongside a
+  CAPABLE one; `/verify` answered for both CONFIRMED and LEAD_ONLY;
+  `/package` and `/certificate.pdf` returned **409** for LEAD_ONLY, **422**
+  for a short purpose, **200** + a real 5,756-byte `%PDF-1.4` for CONFIRMED.
+- **Real bug caught by the live run, not by inspection**: `api.js` rendered
+  FastAPI's non-string `detail` as `[object Object]`, so the 409 gate's
+  own explanation — the most important message on the screen — was
+  unreadable. Fixed for both the object and array (422) shapes.
+- Frontend `npm run lint` and `npm run build` both **pass**, with zero
+  warnings from either new file. This is the first successful frontend
+  build in this environment: the rolldown/oxlint native bindings were
+  missing because Node 22.11.0 is below the `>=22.12.0` engine floor npm
+  enforces. A newer Node (v22.23.2) already present at
+  `~/AppData/Local/hermes/node` installs them; the `npm run lint`/`build`
+  blocker recorded on 2026-09-18 is resolved by putting that on PATH.
+
+**Deliberately NOT claimed:** the geometry columns are NULL for every row
+written before today, and no real camera footage has been processed through
+the new path in this environment — every geometry figure above came from
+synthetic frames or seeded rows in a throwaway DB. Against the real
+accumulated `sentinel.db`, expect every camera to report
+`plate_pixel_width` as unmeasured until the pipeline runs again. The ≥120 px
+threshold remains a **vendor claim**, not a Sentinel-validated figure.
+
 ## 2026-09-19 — write-time evidence integrity + §63-oriented export (done)
 
 Closes `CLAUDE.md` §6 Priority B / §21 P1 #6–7, the last bonus-aligned
@@ -348,50 +530,126 @@ proof / credential rotation.
       not department-suggestive) genuinely can't be classified without
       organizer-provided ground truth or manual per-camera investigation,
       not a script bug. Full backend suite 55/55 passed after the fix.
-- [ ] **Record the own-feed demo video** (§9.3, 2–3 min, must show a real
-      working backend, no mock-ups). Script: `DEMO_SCRIPT_OWN_FEED.md` +
-      `scripts/demo_end_to_end.py` with `SENTINEL_DEMO_PERSIST=1`, then
-      `python -m app.main` + `npm run dev` and screen-record the UI walkthrough.
-      **Organizer guidance received 2026-09-05** (their core team, relayed
-      by the user): for this demo, using any clearly-visible real sandbox
-      camera is fine — no longer needs to be literally "our own feed."
-      `cam06` (a real, close-range, front-facing camera identified today)
-      now has a genuinely strong headline result: a real car's plate
-      (`GJ01RP6128`) read correctly 4/5 times, confirmed via the actual
-      `tracker.py` consensus-vote logic to produce an accepted
-      confidence-0.81 read — not just a promising OCR string (see `HLD.md`
-      §3). **Lead the video with this real result**, not the
-      synthetic-composite montage. Still need the terminal "it's real"
-      proof shot, captions, and final `ffmpeg` concatenation. **Still the
-      single highest-leverage remaining task.**
-- [x] ~~Record the government-feed demo video~~ (§9.4) — **externally
-      blocked, per organizer guidance 2026-09-05**: the hackathon's own
-      core team said their sandbox is still being fixed on their end for
-      this specific test case. Don't force this recording; revisit once
-      they signal it's ready. (The HLS live-view proxy bug that was
-      independently blocking this — a CDN User-Agent gate — is fixed on
-      our side regardless, so we're ready the moment their sandbox is.)
+- [x] **Record the own-feed demo video — recorded 2026-09-28 (§9.3).**
+      Link: <https://drive.google.com/file/d/1q3iwi6t7YKMPP405uBZyMaHIsTCUEYTe/view?usp=drive_link>
+      (Google Drive — access depends on the sharing permissions set on that
+      file; confirm it's viewable by organizers before submission). Status
+      is **user-reported recorded, not independently verified by this
+      agent** — this environment cannot open/play a Drive link, so the
+      content (does it show `GJ19BR3000`/`cam06`, the terminal proof shot,
+      etc. per `DEMO_SCRIPT_OWN_FEED.md`) has not been confirmed frame by
+      frame. Whoever does final QA on the submission package should watch
+      it end-to-end against the script's shot list once before the
+      deadline.
+- [x] **Record the government-feed / live demo video — recorded
+      2026-09-28 (§9.4).**
+      Link: <https://drive.google.com/file/d/1CF0ERX-ZqiYPoCCmkkACkZPoXBKcaSWM/view?usp=sharing>
+      Same caveat as above: **user-reported recorded, not independently
+      verified by this agent** — link accessibility and actual on-screen
+      content (per `DEMO_SCRIPT_GOVERNMENT_FEED.md`'s shot list, including
+      the two-system unified-viewer shot) still need a human watch-through
+      before submission.
 - [x] Solution Presentation (PPT) — v2 done 2026-09-04.
 - [x] Technical Proposal / HLD — `sentinel-solution/docs/HLD.md`
 - [x] Scalability Strategy — `sentinel-solution/docs/SCALABILITY.md`
-- [x] Real-footage ANPR accuracy measurement — done 2026-09-05, corrected
-      twice same day, now conclusively positive: initial scan found 0
-      reads with only wide-overview cameras inspected; reviewing all 30
-      cameras found `cam06` (close-range, ANPR-suitable) and a second real
-      bug (two-line-plate/homoglyph matching in `anpr.py`) — fixed. A full
-      30-camera re-scan with both fixes then found a real car's plate
-      (`GJ01RP6128`) read correctly 4/5 times, confirmed via the actual
-      production consensus-vote logic to produce an ACCEPTED
-      confidence-0.81 read. Real, correct, end-to-end ANPR on live
-      government sandbox footage — not a promising string, the real
-      accept-path, locked in as a regression test
-      (`test_consensus_plate_real_cam06_vehicle_clears_confidence_gate`).
-      See `HLD.md` §3.
+- [x] Real-footage ANPR accuracy measurement — **reopened then
+      re-closed, 2026-09-26 — use the new plate, not the old one.**
+      2026-09-05 work fixed two real bugs (missing close-range camera
+      coverage, two-line-plate/homoglyph matching in `anpr.py`) and
+      captured one real scan's OCR votes for `GJ01RP6128` at confidence
+      0.81. That specific capture did not reproduce across 5 fresh scans
+      2026-09-26 (928+1,057 real vehicle detections, 0 reads) — but a 6th
+      scan (all 30 cameras) produced a fresh, visually-confirmed real
+      read: `cam06`, `GJ19BR3000`, 6/6 consecutive samples, confidence
+      0.917–0.977. The algorithmic consensus-vote fix remains validly
+      locked in either way
+      (`test_consensus_plate_real_cam06_vehicle_clears_confidence_gate`
+      tests the code's behavior given fixed captured votes, independent
+      of which live capture supplied them). **Current status: real,
+      reproduced, end-to-end ANPR on live sandbox footage, demonstrated
+      2026-09-26 — cite `GJ19BR3000`, not `GJ01RP6128`.** See
+      `REQUIREMENTS_COVERAGE.md`'s "ANPR-based metadata generation" row
+      for the full 6-scan sequence. `HLD.md` §3 has the same update.
 - [x] HLS proxy 502/403 — done 2026-09-05 (CDN User-Agent gate, fixed in
       `catalogue.py`).
 - [x] ANPR two-line-plate + homoglyph OCR bug — done 2026-09-05, see above.
 
 ## P1 — do before/alongside the videos if time allows
+
+- [x] **State-code whitelist for `_STATE_SERIES` — RESEARCHED 2026-09-19,
+      NOT IMPLEMENTED, needs a go/no-go decision.**
+
+      `anpr.py`'s `_STATE_SERIES` accepts `[A-Z]{2}` for the state code, so
+      any two letters pass: `XQ01AB1234` and `ZZ01AB1234` both validate as
+      plates today. Restricting the position to real RTO codes cuts that
+      slot from 676 combinations to 40 — roughly a 94% reduction in the
+      false-positive surface at the most error-prone character positions.
+
+      **The authoritative list was gathered 2026-09-19** (Wikipedia,
+      *Vehicle registration plates of India*). 36 current codes — 28 states
+      + 8 UTs:
+
+      `AN AP AR AS BR CG CH DD DL GA GJ HP HR JH JK KA KL LA LD MH ML MN
+      MP MZ NL OD PB PY RJ SK TG TN TR UK UP WB`
+
+      **Plus 4 RETIRED codes that MUST also be accepted** — a state rename
+      does not re-register existing vehicles, so these are still in traffic:
+
+      | Retired | Became | When |
+      |---|---|---|
+      | `TS` | `TG` | 14 Mar 2024 — ~10 years of Telangana registrations |
+      | `DN` | `DD` | 25 Jan 2020 |
+      | `OR` | `OD` | 2011 (Orissa → Odisha) |
+      | `UA` | `UK` | 2007 (Uttaranchal → Uttarakhand) |
+
+      Diplomatic (`CD`/`CC`/`UN`/`IOD`) and military (broad-arrow) plates use
+      different formats entirely and never match `_STATE_SERIES`.
+
+      **Why this is NOT a free win, and why it was deferred rather than
+      built.** A whitelist is *the same class of construct that caused the
+      BH-series bug fixed earlier the same day* — an over-tight validator
+      that silently discards valid plates. Get it wrong and the defect
+      recurs for a different population, and `TS` alone would be a far
+      bigger blast radius than BH ever was. Precision gain vs. the risk of
+      silently eating Telangana is a bad asymmetry this close to
+      submission.
+
+      **Only implement with the lesson applied — make the failure loud:**
+
+      1. Whitelist = 36 current **+ 4 retired**, each retired entry
+         commented with its date and why it is still accepted.
+      2. When a read matches the plate *shape* but carries an unrecognised
+         state code, **log a WARNING naming the code**. This is the whole
+         point: it converts the silent failure mode that made the BH bug
+         invisible into an observable signal, so a missing code shows up in
+         logs instead of quietly dropping plates.
+      3. Tests: all 40 validate; `XQ`/`ZZ` rejected; the warning actually
+         fires on an unrecognised code.
+
+      **Implemented 2026-09-26, exactly as planned above, and triggered by
+      a real live case, not a hypothetical.** During the 2026-09-26
+      11h-`cam06` sandbox scan (interrupted early by an unrelated low-memory
+      background-job reap, see below), OCR produced `FS11ICO9525` on one
+      frame and the correct `GJ11CO9625` on a nearby, clearer frame of the
+      same vehicle — "FS" is not a real state/UT code, exactly the false
+      positive this task predicted. `anpr.py`: added `_KNOWN_STATE_CODES`
+      (36 current + 4 retired, each retired code commented with its date),
+      `_STATE_SERIES_RE` to distinguish a state-series match from a
+      BH-series match inside `_best_pattern_match`, and a `logger.warning`
+      naming the exact rejected code (once per call, on the plain candidate,
+      not spammed across every homoglyph-flip variant). AUTOMATED-TEST
+      VERIFIED: 5 new tests in `test_anpr.py` (all 40 codes validate, `XQ`/
+      `ZZ` rejected, the warning fires and names the code, BH-series
+      unaffected, the 4 retired codes individually) — full suite 319
+      passed. LIVE/REAL VERIFIED: re-ran the actual `PaddleOcrPlateReader`
+      against both real saved crops from the incident above —
+      `GJ11CO9625` still reads correctly, `FS11ICO9525`'s frame now
+      returns `None` with the warning firing exactly as designed.
+
+      Without step 2, recommend **not doing this before submission**.
+      `[NOT ESTABLISHED]` — whether re-registration after a state rename is
+      ever mandatory; the conservative reading (accept retired codes) is the
+      only safe one either way.
 
 **Re-researched 2026-09-10** (4 parallel research-only passes, no code
 changed yet — findings below replace the previous vague entries with
@@ -730,7 +988,9 @@ shown once).
 **Three destinations ship an honest "not yet implemented" screen** naming the
 exact backend work required, rather than being hidden or faked: Investigation
 Cases, ANPR Readiness, Evidence Export (§63). Wording throughout is
-"§63-oriented", never "court admissible".
+"§63-oriented", never "court admissible". *(Superseded 2026-09-19: ANPR
+Readiness and Evidence Export are now built and wired — see the entry at the
+top of this file. Investigation Cases remains a placeholder.)*
 
 Verified: 119/119 backend tests, `npm run lint` (no new warnings), `npm run
 build` clean, and every new endpoint exercised over real HTTP against a running

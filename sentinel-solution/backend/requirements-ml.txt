@@ -34,14 +34,32 @@ protobuf==3.20.2
 # AutoUpdate anyway, silently upgrading the venv to onnx==1.22.0 /
 # protobuf==6.33.6. Attempting to re-pin back to onnx==1.14.1 failed outright
 # on Python 3.12 -- that release predates cp312 wheel support and falls back
-# to a source build requiring cmake (not installed here). paddleocr/
-# paddlepaddle are NOT installed in this venv, so the protobuf conflict
-# described above has not actually triggered yet. Before installing
-# paddleocr/paddlepaddle in THIS venv: either (a) recreate the venv on
-# Python <=3.11 so onnx==1.14.1's prebuilt wheel installs cleanly, or
-# (b) install cmake and build onnx==1.14.1 from source, or (c) find a newer
-# onnx/onnxruntime/protobuf combination that both has cp312 wheels and is
-# verified compatible with paddlepaddle==2.6.2 (not yet attempted).
+# to a source build requiring cmake (not installed here). Options were:
+# (a) recreate the venv on Python <=3.11 so onnx==1.14.1's prebuilt wheel
+# installs cleanly, (b) install cmake and build onnx==1.14.1 from source, or
+# (c) find a newer onnx/onnxruntime/protobuf combination that both has
+# cp312 wheels and is verified compatible with paddlepaddle==2.6.2.
+#
+# **Option (c) resolved 2026-09-26, verified on Python 3.12:**
+#   onnx==1.23.0, onnxruntime==1.30.0, protobuf>=6.31.1
+# (installed via `pip install ultralytics paddleocr==2.9.1 paddlepaddle==2.6.2`
+# without repinning ultralytics first, which is why this resolved to
+# ultralytics==8.4.163, not this file's ultralytics==8.4.138 pin — that
+# version gap is not itself verified compatible/incompatible with the pin
+# below; a fresh install following this file's own instructions, i.e.
+# `pip install -r requirements.txt -r requirements-ml.txt` with the pin as
+# written, was not what today's scans actually ran on.)
+# `paddlepaddle` still hard-requires protobuf<=3.20.2 at import time
+# (`base/proto/*_pb2.py` uses the old descriptor-pool API), so this is NOT a
+# same-protobuf-version fix — it's running paddle's protobuf calls through
+# the pure-Python implementation instead of upgrading/downgrading anything:
+# set `PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python` in the environment
+# before importing `paddleocr`/`paddle`. Verified: `YoloVehicleDetector`,
+# `YoloPlateDetector` (real ONNX weights), and `PaddleOcrPlateReader` all
+# construct and run real inference together in one process with this env
+# var set (see `scripts/real_anpr_scan.py`'s invocation instructions below).
+# The pure-Python protobuf path is slower per-call but this is OCR on
+# small crops, not a hot loop — no observed effect on the 2026-09-26 scans.
 
 # WINDOWS DLL ORDERING GOTCHA (verified empirically, not theoretical):
 # importing paddleocr/paddlepaddle BEFORE torch in the same process corrupts

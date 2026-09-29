@@ -12,6 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .. import config
+from ..analytics.govt_db_adapters import status_report as govt_db_status_report
 from ..db.models import Alert, AuditLog, CameraDensityWindow, CameraRegistry, FederatedEvent
 from ..db.retention import purge_expired
 from .auth import Principal, require_role
@@ -121,3 +122,23 @@ def list_audit_log(
         }
         for r in rows
     ]
+
+
+@router.get("/govt-db-status")
+def govt_db_status(_principal: Principal = Depends(require_role("admin"))):
+    """Per-system configuration status for VAHAN/SARTHI/eGujCop/CCTNS
+    (AFIS/NAFIS) query integration (HLD.md §6's "query, don't copy"
+    principle). Every row reads False in this deployment — none of these
+    have a real access agreement or credentials, and this endpoint makes
+    no query, real or fabricated, when unconfigured (see
+    `analytics/govt_db_adapters.py`)."""
+    return {
+        "note": (
+            "Read-only, on-demand query integration surface for "
+            "government law-enforcement databases. None are configured "
+            "in this deployment — each requires a real integration "
+            "agreement with the owning system, which this project does "
+            "not have."
+        ),
+        "systems": govt_db_status_report(),
+    }
